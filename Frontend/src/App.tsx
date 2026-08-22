@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import DataScienceAssistant from "@/components/experiments/DataScienceAssistant";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,6 +33,13 @@ const PageFallback = () => (
   </div>
 );
 
+const WorkspaceRoute = () => (
+  <>
+    <Workspace />
+    <DataScienceAssistant />
+  </>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -44,7 +52,7 @@ const App = () => (
             <Suspense fallback={<PageFallback />}>
               <Routes>
                 <Route path="/" element={<Home />} />
-                <Route path="/workspace" element={<Workspace />} />
+                <Route path="/workspace" element={<WorkspaceRoute />} />
                 <Route path="/datasets" element={<Navigate to="/workspace" replace />} />
                 <Route path="/experiments" element={<Navigate to="/workspace" replace />} />
                 <Route path="/playground/:experimentId" element={<Navigate to="/workspace" replace />} />

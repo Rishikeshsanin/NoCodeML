@@ -28,6 +28,35 @@ class AssistantChatResponse(BaseModel):
     model: str
 
 
+def _gemini_contents(messages: list[AssistantMessage]) -> list[dict]:
+    """Build a valid multi-turn generateContent history ending in a user turn."""
+    recent = messages[-20:]
+
+    # The UI greeting is local-only. Start provider history at the first real user turn
+    # so the request never begins with a synthetic model prefill.
+    first_user = next((index for index, item in enumerate(recent) if item.role == "user"), None)
+    if first_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user message is required.",
+        )
+    recent = recent[first_user:]
+
+    if recent[-1].role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The conversation must end with a user message.",
+        )
+
+    return [
+        {
+            "role": "model" if message.role == "assistant" else "user",
+            "parts": [{"text": message.content}],
+        }
+        for message in recent
+    ]
+
+
 @router.post("/chat", response_model=AssistantChatResponse)
 async def chat(
     request: AssistantChatRequest,
@@ -39,19 +68,10 @@ async def chat(
             detail="AI assistant is not configured on this deployment yet.",
         )
 
-    contents = [
-        {
-            "role": "model" if message.role == "assistant" else "user",
-            "parts": [{"text": message.content}],
-        }
-        for message in request.messages[-20:]
-    ]
-
     payload = {
         "system_instruction": {"parts": [{"text": request.system_prompt}]},
-        "contents": contents,
+        "contents": _gemini_contents(request.messages),
         "generationConfig": {
-            "temperature": 0.6,
             "maxOutputTokens": 1200,
             "thinkingConfig": {"thinkingLevel": "low"},
         },
@@ -87,7 +107,7 @@ async def chat(
     data = response.json()
     candidates = data.get("candidates") or []
     parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-    text = "".join(part.get("text", "") for part in parts).strip()
+    text = "".join(part.get("text", "") for part in parts if not part.get("thought")).strip()
 
     if not text:
         raise HTTPException(

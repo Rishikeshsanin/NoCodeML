@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Database, Eye, Rows3 } from "lucide-react";
+import { toast } from "sonner";
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { datasetAPI } from "@/services/apiService";
-import { toast } from "sonner";
+import { workspaceDatasetAPI, type WorkspaceDatasetPreview } from "@/services/workspaceService";
 
 interface DatasetPreviewModalProps {
   datasetId: string | null;
@@ -13,119 +15,103 @@ interface DatasetPreviewModalProps {
 
 const DatasetPreviewModal = ({ datasetId, datasetName, open, onOpenChange }: DatasetPreviewModalProps) => {
   const [loading, setLoading] = useState(false);
-  const [previewData, setPreviewData] = useState<any>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<WorkspaceDatasetPreview | null>(null);
 
   useEffect(() => {
-    if (open && datasetId) {
-      loadData();
+    if (!open) {
+      setPreviewData(null);
+      return;
     }
-  }, [open, datasetId]);
-
-  const loadData = async () => {
     if (!datasetId) return;
-    
+
+    let cancelled = false;
     setLoading(true);
-    try {
-      // Backend preview endpoint returns DatasetPreviewResponse:
-      // { columns: [...], data: [[...], [...]], row_count: number, preview_rows: number }
-      const preview = await datasetAPI.preview(datasetId, 50);
-      setPreviewData(preview);
-      
-      // Set stats from preview response
-      setStats({
-        totalRows: preview.row_count,
-        totalColumns: preview.columns?.length || 0,
-        missingValues: 0, // Not provided in preview response
-        numericColumns: 0, // Not provided in preview response
-        columnTypes: {} // Not provided in preview response
+    workspaceDatasetAPI
+      .preview(datasetId, 50)
+      .then((preview) => {
+        if (!cancelled) setPreviewData(preview);
+      })
+      .catch((error: any) => {
+        if (!cancelled) toast.error(error.message || "Failed to load dataset preview");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-    } catch (error: any) {
-      toast.error(error.message || "Failed to load dataset preview");
-    } finally {
-      setLoading(false);
-    }
-  };
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, datasetId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>{datasetName}</DialogTitle>
+          <DialogTitle className="truncate pr-8">{datasetName}</DialogTitle>
           <DialogDescription>
-            Dataset preview and statistics
+            Temporary dataset preview. Only the first 50 rows are loaded into this view.
           </DialogDescription>
         </DialogHeader>
 
         {loading && !previewData ? (
           <div className="space-y-4 py-4">
-            <Skeleton className="h-8 w-full" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[1, 2, 3].map((item) => <Skeleton key={item} className="h-20 w-full" />)}
+            </div>
             <Skeleton className="h-64 w-full" />
           </div>
-        ) : (
-          <div className="flex-1 overflow-auto space-y-6">
-            {/* Statistics */}
-            {stats && (
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-card border border-border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground mb-1">Total Rows</p>
-                  <p className="text-2xl font-bold">{stats.totalRows?.toLocaleString()}</p>
+        ) : previewData ? (
+          <div className="flex-1 space-y-5 overflow-auto pb-1">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[
+                { icon: Rows3, label: "Total rows", value: previewData.row_count.toLocaleString() },
+                { icon: Database, label: "Columns", value: previewData.columns.length.toLocaleString() },
+                { icon: Eye, label: "Preview rows", value: previewData.preview_rows.toLocaleString() },
+              ].map(({ icon: Icon, label, value }) => (
+                <div key={label} className="rounded-2xl border border-border/60 bg-card/50 p-3 sm:p-4">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Icon className="h-3.5 w-3.5" /> {label}
+                  </div>
+                  <p className="mt-1 text-xl font-semibold sm:text-2xl">{value}</p>
                 </div>
-                <div className="bg-card border border-border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground mb-1">Total Columns</p>
-                  <p className="text-2xl font-bold">{stats.totalColumns}</p>
-                </div>
-                <div className="bg-card border border-border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground mb-1">Missing Values</p>
-                  <p className="text-2xl font-bold">{stats.missingValues || 0}</p>
-                </div>
-                <div className="bg-card border border-border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground mb-1">Numeric Columns</p>
-                  <p className="text-2xl font-bold">{stats.numericColumns || 0}</p>
-                </div>
-              </div>
-            )}
+              ))}
+            </div>
 
-            {/* Data Table */}
-            {previewData?.data && (
-              <div>
-                <h3 className="font-semibold mb-3">Data Preview</h3>
-                <div className="border border-border rounded-lg overflow-auto max-h-96">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 sticky top-0">
-                      <tr>
-                        {previewData.columns?.map((col: string, idx: number) => (
-                          <th key={idx} className="px-4 py-3 text-left font-medium border-b border-border whitespace-nowrap">
-                            {col}
-                          </th>
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="font-semibold">Data preview</h3>
+                <p className="text-xs text-muted-foreground">Showing {previewData.preview_rows} of {previewData.row_count.toLocaleString()}</p>
+              </div>
+              <div className="max-h-[50vh] overflow-auto rounded-xl border border-border">
+                <table className="w-full min-w-max text-sm">
+                  <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+                    <tr>
+                      {previewData.columns.map((column) => (
+                        <th key={column} className="whitespace-nowrap border-b border-border px-4 py-3 text-left font-medium">
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewData.data.map((row, rowIndex) => (
+                      <tr key={rowIndex} className="transition-colors hover:bg-muted/20">
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex} className="max-w-[280px] truncate whitespace-nowrap border-b border-border px-4 py-3">
+                            {cell !== null && cell !== undefined && cell !== "" ? String(cell) : (
+                              <span className="italic text-muted-foreground">null</span>
+                            )}
+                          </td>
                         ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {previewData.data.map((row: any[], rowIdx: number) => (
-                        <tr key={rowIdx} className="hover:bg-muted/20 transition-colors">
-                          {row.map((cell: any, cellIdx: number) => (
-                            <td key={cellIdx} className="px-4 py-3 border-b border-border whitespace-nowrap">
-                              {cell !== null && cell !== undefined ? String(cell) : (
-                                <span className="text-muted-foreground italic">null</span>
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Preview Info */}
-                <div className="flex items-center justify-center mt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {previewData.preview_rows} of {stats?.totalRows?.toLocaleString() || 0} total rows
-                  </p>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </div>
           </div>
+        ) : (
+          <div className="py-10 text-center text-sm text-muted-foreground">No preview is available for this dataset.</div>
         )}
       </DialogContent>
     </Dialog>

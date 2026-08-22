@@ -182,6 +182,29 @@ class SessionManager:
             metadata["last_seen"] = self._now()
             self._write_metadata(workspace, metadata)
 
+    def reset_stale_job_leases(self) -> int:
+        """Clear job leases left by a previous API process.
+
+        In-process training jobs cannot survive a backend restart, so any
+        persisted active_jobs count is necessarily stale on startup. Clearing
+        those counters lets normal close/TTL cleanup reclaim interrupted runs.
+        """
+        self.ensure_root()
+        reset = 0
+        with self._lock:
+            for workspace in list(self.root.iterdir()):
+                if not workspace.is_dir():
+                    continue
+                try:
+                    metadata = self._read_metadata(workspace)
+                except SessionNotFound:
+                    continue
+                if int(metadata.get("active_jobs") or 0) > 0:
+                    metadata["active_jobs"] = 0
+                    self._write_metadata(workspace, metadata)
+                    reset += 1
+        return reset
+
     def mark_closing(self, token: str) -> None:
         """Schedule deletion after a grace period.
 

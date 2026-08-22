@@ -16,12 +16,18 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
 
-    # Database
+    # Database (legacy V3 persistence while guest-session migration is in progress)
     DATABASE_URL: str = "sqlite+aiosqlite:///./nocodeml.db"
     DB_SCHEMA: str = "nocodeml"
 
-    # Local artifact staging/storage. In production these paths are private to
-    # the NoCodeML service and are never pointed at another application's data.
+    # Temporary guest workspaces. Raw session tokens are never used as folder names.
+    SESSION_ROOT_DIR: str = "/tmp/nocodeml-sessions"
+    SESSION_TTL_MINUTES: int = 60
+    SESSION_CLEANUP_INTERVAL_SECONDS: int = 300
+    SESSION_CLOSE_GRACE_SECONDS: int = 30
+
+    # Local artifact staging/storage. These legacy paths remain while dataset,
+    # training and prediction services are migrated to the session workspace.
     DATASETS_DIR: str = "./datasets"
     MODELS_DIR: str = "./models"
     PREDICTIONS_DIR: str = "./predictions"
@@ -41,7 +47,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "memory://"
     CELERY_RESULT_BACKEND: str = "cache+memory://"
 
-    # JWT Authentication
+    # JWT Authentication (legacy during guest-session migration)
     SECRET_KEY: str = "local-development-key-change-before-deployment"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
@@ -77,6 +83,10 @@ class Settings(BaseSettings):
         return tuple(Path(path).expanduser() for path in (self.DATASETS_DIR, self.MODELS_DIR, self.PREDICTIONS_DIR))
 
     @property
+    def session_root(self) -> Path:
+        return Path(self.SESSION_ROOT_DIR).expanduser()
+
+    @property
     def uses_object_storage(self) -> bool:
         return self.ARTIFACT_STORAGE_BACKEND.lower() == "s3"
 
@@ -85,11 +95,24 @@ class Settings(BaseSettings):
         if not re.fullmatch(r"[a-z_][a-z0-9_]*", self.DB_SCHEMA):
             raise ValueError("DB_SCHEMA must be a safe lowercase PostgreSQL identifier")
 
-        for field_name in ("DATASETS_DIR", "MODELS_DIR", "PREDICTIONS_DIR", "ARTIFACT_CACHE_DIR"):
+        for field_name in (
+            "SESSION_ROOT_DIR",
+            "DATASETS_DIR",
+            "MODELS_DIR",
+            "PREDICTIONS_DIR",
+            "ARTIFACT_CACHE_DIR",
+        ):
             value = getattr(self, field_name).strip()
             if not value:
                 raise ValueError(f"{field_name} cannot be empty")
             setattr(self, field_name, value)
+
+        if not 5 <= self.SESSION_TTL_MINUTES <= 24 * 60:
+            raise ValueError("SESSION_TTL_MINUTES must be between 5 and 1440")
+        if not 10 <= self.SESSION_CLEANUP_INTERVAL_SECONDS <= 3600:
+            raise ValueError("SESSION_CLEANUP_INTERVAL_SECONDS must be between 10 and 3600")
+        if not 5 <= self.SESSION_CLOSE_GRACE_SECONDS <= 300:
+            raise ValueError("SESSION_CLOSE_GRACE_SECONDS must be between 5 and 300")
 
         backend = self.ARTIFACT_STORAGE_BACKEND.strip().lower()
         if backend not in {"local", "s3"}:
@@ -112,11 +135,13 @@ class Settings(BaseSettings):
             if missing:
                 raise ValueError(f"Missing S3 artifact settings: {', '.join(missing)}")
 
+        # This constraint is intentionally retained until the last persistent
+        # services have been migrated. The final guest-only release removes it.
         if self.ENVIRONMENT.lower() == "production":
             if self.SECRET_KEY == "local-development-key-change-before-deployment" or len(self.SECRET_KEY) < 32:
                 raise ValueError("A strong SECRET_KEY is required in production")
             if not self.is_postgres:
-                raise ValueError("Production NoCodeML requires PostgreSQL")
+                raise ValueError("Production NoCodeML still requires PostgreSQL during the guest-session migration")
             if self.DB_SCHEMA != "nocodeml":
                 raise ValueError("Production NoCodeML must use the isolated 'nocodeml' schema")
         return self

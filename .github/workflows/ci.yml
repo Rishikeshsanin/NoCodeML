@@ -48,6 +48,7 @@ jobs:
       run:
         working-directory: Backend
     env:
+      PYTHONPATH: .
       DATABASE_URL: sqlite+aiosqlite:///./ci_nocodeml.db
       DB_SCHEMA: nocodeml
       CELERY_BROKER_URL: memory://
@@ -77,4 +78,4 @@ jobs:
         run: alembic history
 
       - name: Run smoke tests
-        run: pytest -q
+        run: python -m pytest -q

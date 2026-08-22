@@ -1,4 +1,7 @@
 """Dataset service layer for business logic."""
+from __future__ import annotations
+
+import asyncio
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -10,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.dataset import Dataset
+from app.services.artifact_store import artifact_store
 
 
 UPLOAD_DIR = Path(settings.DATASETS_DIR).expanduser()
@@ -31,9 +35,6 @@ async def create_dataset(
     if not clean_name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Dataset name cannot be empty")
 
-    # Path.name removes any client-supplied directory components. The storage file
-    # itself uses only our UUID + validated extension, so user input never controls
-    # a server filesystem path.
     original_filename = Path(file.filename or "dataset").name
     file_ext = Path(original_filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
@@ -47,22 +48,46 @@ async def create_dataset(
     user_dir = UPLOAD_DIR / str(user_id)
     user_dir.mkdir(parents=True, exist_ok=True)
 
-    storage_path = user_dir / f"{dataset_id}{file_ext}"
+    if artifact_store.is_remote:
+        staging_dir = UPLOAD_DIR / ".staging" / str(user_id)
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        local_path = staging_dir / f"{dataset_id}{file_ext}"
+    else:
+        local_path = user_dir / f"{dataset_id}{file_ext}"
+
+    artifact_uri: Optional[str] = None
 
     try:
-        file_size = await save_upload_file(file, storage_path, MAX_FILE_SIZE)
-        metadata = await extract_file_metadata(str(storage_path))
+        file_size = await save_upload_file(file, local_path, MAX_FILE_SIZE)
+        metadata = await asyncio.to_thread(extract_file_metadata, str(local_path))
+
+        if artifact_store.is_remote:
+            artifact_uri = await asyncio.to_thread(
+                artifact_store.put_file,
+                local_path,
+                f"datasets/{user_id}/{dataset_id}{file_ext}",
+                file.content_type,
+            )
+            local_path.unlink(missing_ok=True)
+        else:
+            artifact_uri = str(local_path)
     except HTTPException:
-        storage_path.unlink(missing_ok=True)
+        local_path.unlink(missing_ok=True)
+        if artifact_uri:
+            await _delete_artifact_quietly(artifact_uri)
         raise
     except (ValueError, pd.errors.ParserError, UnicodeDecodeError) as exc:
-        storage_path.unlink(missing_ok=True)
+        local_path.unlink(missing_ok=True)
+        if artifact_uri:
+            await _delete_artifact_quietly(artifact_uri)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="The uploaded dataset could not be parsed. Check that the file is valid and not corrupted.",
         ) from exc
     except Exception as exc:
-        storage_path.unlink(missing_ok=True)
+        local_path.unlink(missing_ok=True)
+        if artifact_uri:
+            await _delete_artifact_quietly(artifact_uri)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="The dataset could not be processed.",
@@ -75,7 +100,7 @@ async def create_dataset(
         user_id=user_id,
         name=clean_name,
         description=description.strip() if description else None,
-        storage_path=str(storage_path),
+        storage_path=artifact_uri,
         file_name=original_filename,
         file_size_bytes=file_size,
         row_count=metadata["row_count"],
@@ -89,7 +114,8 @@ async def create_dataset(
         await db.refresh(dataset)
     except Exception:
         await db.rollback()
-        storage_path.unlink(missing_ok=True)
+        if artifact_uri:
+            await _delete_artifact_quietly(artifact_uri)
         raise
 
     return dataset
@@ -101,7 +127,6 @@ async def get_user_datasets(
     skip: int = 0,
     limit: int = 100,
 ) -> tuple[List[Dataset], int]:
-    """Fetch all datasets for a user with bounded pagination."""
     skip = max(0, skip)
     limit = max(1, min(limit, 100))
 
@@ -125,7 +150,6 @@ async def get_dataset_by_id(
     dataset_id: uuid.UUID,
     user_id: int,
 ) -> Optional[Dataset]:
-    """Fetch a single dataset and verify ownership."""
     query = select(Dataset).where(Dataset.id == dataset_id, Dataset.user_id == user_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -138,7 +162,6 @@ async def update_dataset(
     name: str,
     description: Optional[str],
 ) -> Optional[Dataset]:
-    """Update dataset name and description."""
     dataset = await get_dataset_by_id(db, dataset_id, user_id)
     if not dataset:
         return None
@@ -149,7 +172,6 @@ async def update_dataset(
 
     dataset.name = clean_name
     dataset.description = description.strip() if description else None
-
     await db.commit()
     await db.refresh(dataset)
     return dataset
@@ -160,7 +182,6 @@ async def check_dataset_dependencies(
     dataset_id: uuid.UUID,
     user_id: int,
 ) -> None:
-    """Reject deletion while user-owned experiments still reference the dataset."""
     from app.models.experiment import Experiment
 
     query = select(Experiment).where(
@@ -173,7 +194,13 @@ async def check_dataset_dependencies(
     if experiments:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot delete dataset while {len(experiments)} experiment(s) still use it.",
+            detail={
+                "message": f"Cannot delete dataset while {len(experiments)} experiment(s) still use it.",
+                "dependencies": [
+                    {"id": str(experiment.id), "name": experiment.name}
+                    for experiment in experiments
+                ],
+            },
         )
 
 
@@ -182,19 +209,16 @@ async def delete_dataset(
     dataset_id: uuid.UUID,
     user_id: int,
 ) -> bool:
-    """Delete a user's dataset record and its NoCodeML-owned artifact."""
     dataset = await get_dataset_by_id(db, dataset_id, user_id)
     if not dataset:
         return False
 
     await check_dataset_dependencies(db, dataset_id, user_id)
 
-    # Commit database deletion first; the file is removed only after the record can
-    # no longer be referenced. A missing artifact is harmless and treated idempotently.
-    storage_path = dataset.storage_path
+    artifact_uri = dataset.storage_path
     await db.delete(dataset)
     await db.commit()
-    delete_file(storage_path)
+    await _delete_artifact_quietly(artifact_uri)
     return True
 
 
@@ -204,7 +228,6 @@ async def get_dataset_preview(
     user_id: int,
     rows: int = 10,
 ) -> Optional[Dict[str, Any]]:
-    """Get a bounded preview of dataset contents."""
     dataset = await get_dataset_by_id(db, dataset_id, user_id)
     if not dataset:
         return None
@@ -212,23 +235,7 @@ async def get_dataset_preview(
     rows = max(1, min(rows, MAX_PREVIEW_ROWS))
 
     try:
-        file_ext = Path(dataset.storage_path).suffix.lower()
-        if file_ext == ".csv":
-            df = pd.read_csv(dataset.storage_path, nrows=rows)
-        elif file_ext in {".xlsx", ".xls"}:
-            df = pd.read_excel(dataset.storage_path, nrows=rows)
-        elif file_ext == ".parquet":
-            df = pd.read_parquet(dataset.storage_path).head(rows)
-        else:
-            raise ValueError("Unsupported stored file type")
-
-        df_filled = df.astype(object).where(pd.notna(df), None)
-        return {
-            "columns": [str(column) for column in df.columns],
-            "data": df_filled.values.tolist(),
-            "row_count": dataset.row_count,
-            "preview_rows": len(df),
-        }
+        return await asyncio.to_thread(read_dataset_preview, dataset.storage_path, dataset.row_count, rows)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -254,19 +261,21 @@ async def save_upload_file(file: UploadFile, destination: Path, max_size: int) -
     return file_size
 
 
-async def extract_file_metadata(file_path: str) -> Dict[str, Any]:
-    """Extract basic metadata from a validated dataset file."""
-    file_ext = Path(file_path).suffix.lower()
-
+def read_dataframe(path: str | Path, *, nrows: Optional[int] = None) -> pd.DataFrame:
+    file_path = Path(path)
+    file_ext = file_path.suffix.lower()
     if file_ext == ".csv":
-        df = pd.read_csv(file_path)
-    elif file_ext in {".xlsx", ".xls"}:
-        df = pd.read_excel(file_path)
-    elif file_ext == ".parquet":
+        return pd.read_csv(file_path, nrows=nrows)
+    if file_ext in {".xlsx", ".xls"}:
+        return pd.read_excel(file_path, nrows=nrows)
+    if file_ext == ".parquet":
         df = pd.read_parquet(file_path)
-    else:
-        raise ValueError("Unsupported file type")
+        return df.head(nrows) if nrows is not None else df
+    raise ValueError("Unsupported file type")
 
+
+def extract_file_metadata(file_path: str) -> Dict[str, Any]:
+    df = read_dataframe(file_path)
     row_count, column_count = df.shape
     if column_count == 0:
         raise ValueError("Dataset has no columns")
@@ -290,10 +299,22 @@ async def extract_file_metadata(file_path: str) -> Dict[str, Any]:
     }
 
 
-def delete_file(storage_path: str) -> bool:
-    """Delete a file artifact if it exists."""
-    path = Path(storage_path)
-    if path.exists() and path.is_file():
-        path.unlink()
-        return True
-    return False
+def read_dataset_preview(uri: str, total_rows: int, rows: int) -> Dict[str, Any]:
+    with artifact_store.materialize(uri) as local_path:
+        df = read_dataframe(local_path, nrows=rows)
+    df_filled = df.astype(object).where(pd.notna(df), None)
+    return {
+        "columns": [str(column) for column in df.columns],
+        "data": df_filled.values.tolist(),
+        "row_count": total_rows,
+        "preview_rows": len(df),
+    }
+
+
+async def _delete_artifact_quietly(uri: str) -> None:
+    try:
+        await asyncio.to_thread(artifact_store.delete, uri)
+    except Exception as exc:
+        # An orphaned private artifact is preferable to rolling back an already
+        # committed database delete. Operators can clean these from provider logs.
+        print(f"[NoCodeML] Artifact cleanup warning: {type(exc).__name__}")

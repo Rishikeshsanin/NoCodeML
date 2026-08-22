@@ -94,7 +94,6 @@ class WorkspaceTrainingRunner:
                 },
             )
 
-        # Validate that both the session and dataset belong to this workspace.
         dataset = get_workspace_dataset(token, config["dataset_id"])
         digest = session_manager.token_digest(token)
 
@@ -146,10 +145,18 @@ class WorkspaceTrainingRunner:
             "temporary": True,
         }
 
+        lease_acquired = False
         try:
+            # Hold the session from the moment it enters the global queue. This
+            # prevents close/TTL cleanup from deleting a queued dataset before
+            # the worker thread starts executing the model fit.
+            session_manager.acquire_job(token)
+            lease_acquired = True
             self._write_run(token, run_id, initial)
             self._executor.submit(self._execute, token, run_id, config, digest)
         except Exception:
+            if lease_acquired:
+                session_manager.release_job(token)
             with self._lock:
                 self._active_sessions.discard(digest)
             raise
@@ -157,10 +164,7 @@ class WorkspaceTrainingRunner:
         return initial.copy()
 
     def _execute(self, token: str, run_id: str, config: dict[str, Any], digest: str) -> None:
-        lease_acquired = False
         try:
-            session_manager.acquire_job(token)
-            lease_acquired = True
             dataset = get_workspace_dataset(token, config["dataset_id"])
             dataset_path = session_manager.safe_path(token, "datasets", dataset["stored_filename"], touch=False)
             models_dir = session_manager.safe_path(token, "models", run_id, touch=False)
@@ -250,8 +254,6 @@ class WorkspaceTrainingRunner:
             run["completed_at"] = self._now()
             self._write_run(token, run_id, run)
         except (SessionExpired, SessionNotFound):
-            # The whole workspace is temporary. If it disappeared, there is
-            # intentionally nowhere to persist an error record.
             return
         except Exception as exc:
             try:
@@ -266,21 +268,16 @@ class WorkspaceTrainingRunner:
             except Exception:
                 pass
         finally:
-            if lease_acquired:
-                session_manager.release_job(token)
+            session_manager.release_job(token)
             with self._lock:
                 self._active_sessions.discard(digest)
 
     @staticmethod
     def _choose_best(results: list[dict[str, Any]], task_type: str) -> dict[str, Any]:
-        if task_type == "classification":
-            metric_name = "f1_score"
-            def score(result: dict[str, Any]) -> float:
-                return float((result.get("metrics") or {}).get("test", {}).get(metric_name, float("-inf")))
-        else:
-            metric_name = "r2_score"
-            def score(result: dict[str, Any]) -> float:
-                return float((result.get("metrics") or {}).get("test", {}).get(metric_name, float("-inf")))
+        metric_name = "f1_score" if task_type == "classification" else "r2_score"
+
+        def score(result: dict[str, Any]) -> float:
+            return float((result.get("metrics") or {}).get("test", {}).get(metric_name, float("-inf")))
 
         best = max(results, key=score)
         return {

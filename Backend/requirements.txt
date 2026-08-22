@@ -34,13 +34,15 @@ openpyxl>=3.1,<4
 pyarrow>=16,<25
 plotly>=5.24,<7
 
+# Object Storage
+boto3>=1.35,<2
+
 # Machine Learning
 scikit-learn>=1.5,<2
 xgboost>=2.1,<4
 lightgbm>=4.5,<5
 joblib>=1.4,<2
 imbalanced-learn>=0.12,<1
-autoclean
 
 # Utilities
 python-dateutil>=2.9,<3

@@ -25,11 +25,26 @@ def create_authenticated_client(client: TestClient) -> tuple[str, str]:
     return email, login.json()["access_token"]
 
 
-def test_health_endpoint():
+def test_health_endpoint_reports_v3_version():
     with TestClient(app) as client:
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json()["status"] == "healthy"
+        payload = response.json()
+        assert payload["status"] == "healthy"
+        assert payload["version"].startswith("3.")
+
+
+def test_readiness_endpoint_checks_dependencies_without_secrets():
+    with TestClient(app) as client:
+        response = client.get("/ready")
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["status"] == "ready"
+        assert payload["checks"]["database"]["status"] == "ready"
+        assert payload["checks"]["database"]["schema"] == "nocodeml"
+        assert payload["checks"]["queue"]["status"] == "ready"
+        assert "DATABASE_URL" not in response.text
+        assert "SECRET_KEY" not in response.text
 
 
 def test_model_catalog_is_available():

@@ -96,9 +96,8 @@ export const clearTemporarySession = async (token: string): Promise<void> => {
 };
 
 export const markTemporarySessionClosing = (token: string) => {
-  const body = JSON.stringify({ session_token: token });
-  const blob = new Blob([body], { type: "application/json" });
-  return navigator.sendBeacon(`${API_BASE_URL}/api/v1/session/end`, blob);
+  const form = new URLSearchParams({ session_token: token });
+  return navigator.sendBeacon(`${API_BASE_URL}/api/v1/session/end`, form);
 };
 
 export { API_BASE_URL, SESSION_STORAGE_KEY };

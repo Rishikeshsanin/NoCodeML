@@ -1,131 +1,186 @@
-import { Link } from "react-router-dom";
-import { Upload, BarChart3, Zap, Download, Brain, TrendingUp, Sparkles, MessageSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Link } from 'react-router-dom';
+import {
+  ArrowRight,
+  BarChart3,
+  Bot,
+  BrainCircuit,
+  Database,
+  Gauge,
+  GitCompareArrows,
+  Sparkles,
+  Upload,
+  WandSparkles,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
 
 const Home = () => {
   const features = [
     {
       icon: Upload,
-      title: "Data Upload & Management",
-      description: "Drag and drop CSV files up to 100MB. Automatic validation and preprocessing suggestions.",
-      gradient: "from-primary to-primary-blue"
+      title: 'Bring your dataset',
+      description: 'Upload CSV, Excel or Parquet data and get structured metadata, previews and validation.',
     },
     {
       icon: BarChart3,
-      title: "Interactive Visualizations",
-      description: "Build custom plots with Plotly. Correlation matrices, distributions, and more.",
-      gradient: "from-primary-purple to-accent"
+      title: 'Understand it first',
+      description: 'Explore distributions, missing values, outliers, correlations and feature behaviour before training.',
     },
     {
-      icon: Brain,
-      title: "Automated Model Training",
-      description: "Train multiple models simultaneously. Compare performance metrics in real-time.",
-      gradient: "from-primary-blue to-info"
+      icon: WandSparkles,
+      title: 'Configure without code',
+      description: 'Choose targets, features, preprocessing and model presets through a guided experiment workflow.',
     },
     {
-      icon: Sparkles,
-      title: "Smart Hyperparameter Tuning",
-      description: "Automatic hyperparameter optimization for best model performance without manual configuration.",
-      gradient: "from-accent to-primary-blue"
+      icon: BrainCircuit,
+      title: 'Train real ML models',
+      description: 'Run classification and regression experiments with scikit-learn, XGBoost and LightGBM.',
     },
     {
-      icon: MessageSquare,
-      title: "AI Assistant Chatbot",
-      description: "Get instant help and insights with our integrated AI assistant for data analysis and ML guidance.",
-      gradient: "from-primary-purple to-primary"
+      icon: GitCompareArrows,
+      title: 'Compare what matters',
+      description: 'Review metrics, feature importance and model performance instead of trusting a single score.',
     },
     {
-      icon: TrendingUp,
-      title: "Real-time Results",
-      description: "Live training monitoring with detailed evaluation metrics and model comparison.",
-      gradient: "from-primary to-primary-purple"
+      icon: Bot,
+      title: 'Ask the experiment',
+      description: 'Use the grounded Data Science Assistant to interpret the current dataset, configuration and results.',
     },
-    {
-      icon: Zap,
-      title: "Fast & Intuitive",
-      description: "Streamlined workflow from data upload to predictions in minutes, not hours.",
-      gradient: "from-accent to-primary-purple"
-    }
   ];
-  
+
+  const workflow = ['Upload', 'Explore', 'Configure', 'Train', 'Compare', 'Predict'];
+
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 md:py-32">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary-purple/10 to-primary-blue/10 animate-pulse-glow"></div>
-        <div className="container relative mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center space-y-8 animate-fade-in">
-            <h1 className="text-5xl md:text-7xl font-bold gradient-text leading-tight">
-              Machine Learning Without Code
+    <main className="relative isolate overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_15%,hsl(var(--primary)/0.11),transparent_30%),radial-gradient(circle_at_85%_10%,hsl(var(--primary-purple)/0.12),transparent_28%),radial-gradient(circle_at_55%_72%,hsl(var(--primary-blue)/0.08),transparent_35%)]" />
+
+      <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:px-8 lg:py-24">
+        <div className="space-y-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary shadow-[0_0_30px_hsl(var(--primary)/0.08)]">
+            <Sparkles className="h-3.5 w-3.5" />
+            No-code experimentation. Real machine learning.
+          </div>
+
+          <div className="space-y-5">
+            <h1 className="max-w-4xl text-4xl font-black tracking-[-0.04em] sm:text-5xl md:text-6xl lg:text-7xl">
+              Turn raw data into a model you can <span className="gradient-text">understand.</span>
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
-              Upload your data, visualize patterns, train models with automated hyperparameter tuning, and get AI-powered insights - all through an intuitive interface
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-              <Link to="/experiments">
-                <Button size="lg" className="gradient-primary text-background font-semibold hover:opacity-90 transition-opacity px-8 py-6 text-lg">
-                  Get Started
-                </Button>
-              </Link>
-              <Link to="/experiments">
-                <Button size="lg" variant="outline" className="border-primary text-primary hover:bg-primary/10 px-8 py-6 text-lg">
-                  View Demo
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Features Grid */}
-      <section className="py-20 bg-card/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16 animate-slide-up">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Everything You Need for <span className="gradient-text">ML Experiments</span>
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From data exploration to automated model optimization with AI assistance, all in one platform
+            <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+              NoCodeML is a guided AutoML workspace for exploring datasets, training multiple models, comparing results and making predictions—without hiding the reasoning behind the workflow.
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
-            {features.map((feature, index) => (
-              <div
-                key={index}
-                className="card-hover bg-card border border-border rounded-xl p-6 space-y-4"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${feature.gradient} flex items-center justify-center`}>
-                  <feature.icon className="w-6 h-6 text-background" />
-                </div>
-                <h3 className="text-xl font-semibold">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-12 rounded-xl px-6 font-semibold shadow-[0_0_30px_hsl(var(--primary)/0.18)]">
+              <Link to="/experiments">
+                Open experiments <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-12 rounded-xl border-border/80 bg-card/40 px-6">
+              <Link to="/datasets">Manage datasets</Link>
+            </Button>
+          </div>
+
+          <div className="grid max-w-2xl grid-cols-3 gap-3 pt-2">
+            {[
+              ['8', 'ML models'],
+              ['6', 'workflow stages'],
+              ['1', 'guided workspace'],
+            ].map(([value, label]) => (
+              <div key={label} className="rounded-2xl border border-border/60 bg-card/35 p-3 backdrop-blur-xl sm:p-4">
+                <div className="text-2xl font-bold text-foreground sm:text-3xl">{value}</div>
+                <div className="mt-1 text-[11px] leading-4 text-muted-foreground sm:text-xs">{label}</div>
               </div>
             ))}
           </div>
         </div>
-      </section>
-      
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto bg-gradient-to-br from-primary/20 via-primary-purple/20 to-primary-blue/20 rounded-2xl border border-primary/30 p-12 text-center space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Ready to Build Your First Model?
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Start experimenting with machine learning in minutes. Powered by automated hyperparameter tuning and AI assistance. No coding required.
-            </p>
-            <Link to="/experiments">
-              <Button size="lg" className="gradient-primary text-background font-semibold hover:opacity-90 transition-opacity px-8 py-6 text-lg">
-                Launch Playground
-              </Button>
-            </Link>
+
+        <div className="relative mx-auto w-full max-w-xl">
+          <div className="absolute -inset-8 -z-10 rounded-full bg-primary/10 blur-3xl" />
+          <div className="overflow-hidden rounded-[2rem] border border-border/70 bg-card/55 p-4 shadow-2xl backdrop-blur-2xl sm:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary">Experiment flow</p>
+                <h2 className="mt-1 text-xl font-semibold sm:text-2xl">From file to prediction</h2>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
+                <Gauge className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {workflow.map((step, index) => (
+                <div key={step} className="group flex items-center gap-3 rounded-2xl border border-border/55 bg-background/45 p-3.5 transition-all hover:border-primary/30 hover:bg-primary/[0.04]">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-secondary text-xs font-bold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
+                    {String(index + 1).padStart(2, '0')}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{step}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {[
+                        'Ingest and validate your data',
+                        'See quality, distributions and relationships',
+                        'Select targets, features and models',
+                        'Run asynchronous model training',
+                        'Inspect metrics and model behaviour',
+                        'Use the selected model on new data',
+                      ][index]}
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
-    </div>
+
+      <section className="border-y border-border/55 bg-card/20">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <div className="mb-10 max-w-2xl">
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.22em] text-primary">What is inside</p>
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">A real ML workflow, not a demo form.</h2>
+            <p className="mt-4 leading-7 text-muted-foreground">
+              Every stage is connected to the same experiment so the platform can carry context from exploration through training, comparison and prediction.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature) => (
+              <article key={feature.title} className="group rounded-3xl border border-border/60 bg-background/40 p-5 backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-primary/25 hover:shadow-[0_18px_55px_hsl(var(--primary)/0.08)] sm:p-6">
+                <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
+                  <feature.icon className="h-5 w-5 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold">{feature.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{feature.description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+        <div className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card/70 to-primary-purple/[0.08] p-6 sm:p-10 lg:p-12">
+          <div className="pointer-events-none absolute right-0 top-0 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/20 bg-background/50">
+                <Database className="h-5 w-5 text-primary" />
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Start with the data you already have.</h2>
+              <p className="mt-4 leading-7 text-muted-foreground">
+                Upload a dataset, inspect it before training, then build an experiment you can explain—not just an accuracy number you cannot defend.
+              </p>
+            </div>
+            <Button asChild size="lg" className="h-12 shrink-0 rounded-xl px-6">
+              <Link to="/datasets">
+                Upload a dataset <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 };
 

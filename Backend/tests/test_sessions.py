@@ -85,3 +85,33 @@ def test_cleanup_removes_expired_workspace(tmp_path: Path):
 
     assert manager.cleanup_expired() == 1
     assert not workspace.exists()
+
+
+def test_active_job_lease_blocks_cleanup_until_released(tmp_path: Path):
+    manager = SessionManager(root=tmp_path, ttl_seconds=3600, close_grace_seconds=30)
+    token, _ = manager.create()
+    workspace, metadata = manager.resolve(token, touch=False)
+
+    manager.acquire_job(token)
+    metadata = manager._read_metadata(workspace)
+    metadata["expires_at"] = 0
+    metadata["delete_after"] = 0
+    manager._write_metadata(workspace, metadata)
+
+    assert manager.cleanup_expired() == 0
+    assert workspace.exists()
+
+    manager.release_job(token)
+    assert manager.cleanup_expired() == 1
+    assert not workspace.exists()
+
+
+def test_restart_recovery_clears_stale_job_leases(tmp_path: Path):
+    manager = SessionManager(root=tmp_path, ttl_seconds=3600, close_grace_seconds=30)
+    token, _ = manager.create()
+    workspace, _ = manager.resolve(token, touch=False)
+    manager.acquire_job(token)
+
+    assert manager._read_metadata(workspace)["active_jobs"] == 1
+    assert manager.reset_stale_job_leases() == 1
+    assert manager._read_metadata(workspace)["active_jobs"] == 0

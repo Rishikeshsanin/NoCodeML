@@ -1,0 +1,80 @@
+name: NoCodeML CI
+
+on:
+  push:
+    branches:
+      - main
+      - release/v3-revival
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend build and lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:8000
+
+      - name: Lint
+        run: npm run lint
+
+  backend:
+    name: Backend smoke tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./ci_nocodeml.db
+      DB_SCHEMA: nocodeml
+      CELERY_BROKER_URL: memory://
+      CELERY_RESULT_BACKEND: cache+memory://
+      SECRET_KEY: ci-only-secret-key-that-is-long-enough-123456789
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: Backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
+      - name: Compile backend
+        run: python -m compileall -q app
+
+      - name: Validate Alembic history
+        run: alembic history
+
+      - name: Run smoke tests
+        run: pytest -q

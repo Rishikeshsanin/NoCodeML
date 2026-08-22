@@ -1,24 +1,32 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.core.config import settings
+
 
 sync_database_url = settings.DATABASE_URL.replace(
     "sqlite+aiosqlite://", "sqlite://", 1
 )
 
-# psycopg3 supports both sync and async with the same driver
-# For sync, we use create_engine with postgresql+psycopg URL (not create_async_engine)
-# The psycopg[binary] package includes both sync and async support
-sync_engine = create_engine(
-    sync_database_url,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
-    pool_recycle=3600,
-    echo=False,
-    future=True  # Use SQLAlchemy 2.0 style
-)
+sync_engine_kwargs = {
+    "pool_pre_ping": True,
+    "echo": False,
+    "future": True,
+}
+
+if sync_database_url.startswith("postgresql"):
+    sync_engine_kwargs.update(
+        {
+            "connect_args": settings.database_connect_args,
+            "pool_size": 5,
+            "max_overflow": 10,
+            "pool_recycle": 3600,
+        }
+    )
+
+sync_engine = create_engine(sync_database_url, **sync_engine_kwargs)
 SyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
 
 def get_sync_db():
     db = SyncSessionLocal()

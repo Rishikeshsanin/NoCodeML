@@ -14,6 +14,15 @@ interface Message {
   content: string;
 }
 
+interface DataScienceAssistantProps {
+  datasetId?: string;
+  edaData?: unknown;
+  currentPhase?: "analysis" | "config" | "training" | "results" | "predict";
+  experimentConfig?: unknown;
+  trainingData?: unknown;
+  resultsData?: unknown;
+}
+
 const safeJson = (value: unknown, maxLength = 14000) => {
   try {
     const text = JSON.stringify(value, null, 2);
@@ -23,7 +32,8 @@ const safeJson = (value: unknown, maxLength = 14000) => {
   }
 };
 
-export const DataScienceAssistant = () => {
+export const DataScienceAssistant = (props: DataScienceAssistantProps = {}) => {
+  void props;
   const { status } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");

@@ -1,83 +1,80 @@
+name: nocodeml
+
 services:
-  fastapi_app:
+  api:
     build: .
-    container_name: fastapi_app
     working_dir: /app
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app:ro  # Read-only for safety
-      - dataset_storage:/app/datasets
-      - models_storage:/app/models  # Persistent storage for trained models
-      - predictions_storage:/app/predictions  # Persistent storage for prediction results
+      - ./app:/app/app:ro
+      - datasets:/app/datasets
+      - models:/app/models
+      - predictions:/app/predictions
     env_file:
       - .env
     environment:
-      - PYTHONPATH=/app
+      PYTHONPATH: /app
+      DATASETS_DIR: /app/datasets
+      MODELS_DIR: /app/models
+      PREDICTIONS_DIR: /app/predictions
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
 
-  celery_worker:
+  worker:
     build: .
-    container_name: celery_worker
     working_dir: /app
     volumes:
       - ./app:/app/app:ro
-      - dataset_storage:/app/datasets
-      - models_storage:/app/models  # Celery worker needs write access to save models
-      - predictions_storage:/app/predictions  # Storage for prediction results
+      - datasets:/app/datasets
+      - models:/app/models
+      - predictions:/app/predictions
     env_file:
       - .env
     environment:
-      - PYTHONPATH=/app
+      PYTHONPATH: /app
+      DATASETS_DIR: /app/datasets
+      MODELS_DIR: /app/models
+      PREDICTIONS_DIR: /app/predictions
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
 
   postgres:
-    image: postgres:17-alpine  # Use alpine for smaller image
-    container_name: postgres_db
-    env_file:
-      - .env
+    image: postgres:17-alpine
     ports:
       - "5433:5432"
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: redis_broker
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 5
-  
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    restart: unless-stopped
-    network_mode: "service:fastapi_app"
-    depends_on:
-      - fastapi_app
-    profiles:
-      - tunnel
+      retries: 10
 
 volumes:
   postgres_data:
-  dataset_storage:
-  models_storage:  # Persistent storage for trained ML models
-  predictions_storage:  # Persistent storage for prediction results
+  redis_data:
+  datasets:
+  models:
+  predictions:

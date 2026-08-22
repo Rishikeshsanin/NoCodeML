@@ -21,6 +21,11 @@ from app.services.workspace_eda_service import (
     generate_workspace_plot_data,
     get_workspace_eda_summary,
 )
+from app.services.workspace_export_service import (
+    build_session_bundle,
+    export_eda,
+    export_training,
+)
 from app.services.workspace_prediction_service import (
     list_predictions,
     predict_batch,
@@ -120,6 +125,12 @@ async def dataset_plot(dataset_id: str, request: PlotRequest, token: SessionToke
     )
 
 
+@router.get("/datasets/{dataset_id}/export/{kind}")
+async def download_eda_export(dataset_id: str, kind: str, token: SessionToken):
+    file_path, download_name, media_type = await export_eda(token, dataset_id, kind)
+    return FileResponse(path=file_path, media_type=media_type, filename=download_name)
+
+
 @router.delete("/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_dataset(dataset_id: str, token: SessionToken):
     delete_workspace_dataset(token, dataset_id)
@@ -140,6 +151,12 @@ def list_training_runs(token: SessionToken):
 @router.get("/training/runs/{run_id}")
 def get_training_run(run_id: str, token: SessionToken):
     return workspace_training_runner.get(token, run_id)
+
+
+@router.get("/training/runs/{run_id}/export/{kind}")
+def download_training_export(run_id: str, kind: str, token: SessionToken):
+    file_path, download_name, media_type = export_training(token, run_id, kind)
+    return FileResponse(path=file_path, media_type=media_type, filename=download_name)
 
 
 @router.post("/training/runs/{run_id}/predict")
@@ -170,3 +187,9 @@ def download_prediction(prediction_id: str, token: SessionToken):
         media_type="text/csv",
         filename=download_name,
     )
+
+
+@router.get("/export/session")
+async def download_session(token: SessionToken):
+    file_path, download_name = await build_session_bundle(token)
+    return FileResponse(path=file_path, media_type="application/zip", filename=download_name)

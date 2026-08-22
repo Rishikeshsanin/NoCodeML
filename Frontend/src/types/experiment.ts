@@ -75,6 +75,17 @@ export interface ColumnInfo {
   sample_values?: unknown[];
 }
 
+export interface NumericColumnStatistics {
+  count: number;
+  mean: number;
+  std: number;
+  min: number;
+  "25%": number;
+  "50%": number;
+  "75%": number;
+  max: number;
+}
+
 export interface EDAResponse {
   dataset_info: {
     id: string;
@@ -89,7 +100,7 @@ export interface EDAResponse {
   numeric_columns: string[];
   categorical_columns: string[];
   id_columns: string[];
-  statistics: Record<string, unknown>;
+  statistics: Record<string, NumericColumnStatistics>;
   correlations: {
     columns: string[];
     matrix: number[][];

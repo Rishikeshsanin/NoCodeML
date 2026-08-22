@@ -53,6 +53,41 @@ def test_register_login_and_me_round_trip():
         assert me.json()["email"] == email
 
 
+def test_email_identity_is_case_insensitive_and_duplicate_safe():
+    with TestClient(app) as client:
+        local = f"case-{uuid4().hex[:10]}"
+        mixed_case = f"{local}@Example.COM"
+        normalized = mixed_case.lower()
+
+        register = client.post(
+            "/api/v1/auth/register",
+            json={"email": mixed_case, "password": PASSWORD},
+        )
+        assert register.status_code == 201, register.text
+        assert register.json()["email"] == normalized
+
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": mixed_case.upper(), "password": PASSWORD},
+        )
+        assert login.status_code == 200, login.text
+
+        duplicate = client.post(
+            "/api/v1/auth/register",
+            json={"email": normalized, "password": PASSWORD},
+        )
+        assert duplicate.status_code == 409, duplicate.text
+
+
+def test_rejects_passwords_beyond_bcrypt_limit():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/register",
+            json={"email": f"long-{uuid4().hex[:8]}@example.com", "password": "x" * 73},
+        )
+        assert response.status_code == 422
+
+
 def test_ai_assistant_is_protected_and_fails_safely_without_provider_key():
     with TestClient(app) as client:
         anonymous = client.post(

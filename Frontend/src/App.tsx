@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ExperimentProvider } from "./contexts/ExperimentContext";
 import { ModelsProvider } from "./contexts/ModelsContext";
+import { SessionProvider } from "./contexts/SessionContext";
 import { TrainingProvider } from "./contexts/TrainingContext";
 
 const Home = lazy(() => import("./pages/Home"));
@@ -43,41 +44,43 @@ const PageFallback = () => (
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthProvider>
-        <ModelsProvider>
-          <ExperimentProvider>
-            <TrainingProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <Suspense fallback={<PageFallback />}>
-                  <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route
-                      path="/*"
-                      element={
-                        <ProtectedRoute>
-                          <div className="min-h-screen bg-background">
-                            <Header />
-                            <Routes>
-                              <Route path="/" element={<Home />} />
-                              <Route path="/datasets" element={<Datasets />} />
-                              <Route path="/experiments" element={<Experiments />} />
-                              <Route path="/playground/:experimentId" element={<Playground />} />
-                              <Route path="*" element={<NotFound />} />
-                            </Routes>
-                          </div>
-                        </ProtectedRoute>
-                      }
-                    />
-                  </Routes>
-                </Suspense>
-              </BrowserRouter>
-            </TrainingProvider>
-          </ExperimentProvider>
-        </ModelsProvider>
-      </AuthProvider>
+      <SessionProvider>
+        <AuthProvider>
+          <ModelsProvider>
+            <ExperimentProvider>
+              <TrainingProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <Suspense fallback={<PageFallback />}>
+                    <Routes>
+                      <Route path="/login" element={<Login />} />
+                      <Route path="/register" element={<Register />} />
+                      <Route
+                        path="/*"
+                        element={
+                          <ProtectedRoute>
+                            <div className="min-h-screen bg-background">
+                              <Header />
+                              <Routes>
+                                <Route path="/" element={<Home />} />
+                                <Route path="/datasets" element={<Datasets />} />
+                                <Route path="/experiments" element={<Experiments />} />
+                                <Route path="/playground/:experimentId" element={<Playground />} />
+                                <Route path="*" element={<NotFound />} />
+                              </Routes>
+                            </div>
+                          </ProtectedRoute>
+                        }
+                      />
+                    </Routes>
+                  </Suspense>
+                </BrowserRouter>
+              </TrainingProvider>
+            </ExperimentProvider>
+          </ModelsProvider>
+        </AuthProvider>
+      </SessionProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

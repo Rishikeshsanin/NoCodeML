@@ -81,6 +81,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+      - name: Validate deployment files
+        run: |
+          python -m json.tool vercel.json >/dev/null
+          docker compose --env-file deploy/oci/.env.example -f deploy/oci/docker-compose.yml config >/dev/null
       - name: Build backend image
         run: docker build --pull -t nocodeml-backend:ci Backend
       - name: Verify non-root runtime user

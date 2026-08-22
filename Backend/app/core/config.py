@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import List
 
@@ -7,38 +6,40 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """NoCodeML runtime settings.
+
+    V3 visitor workflows are intentionally database-free. Legacy database and
+    Celery settings remain optional only so archived modules can still be read
+    or exercised in development without becoming production dependencies.
+    """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     PROJECT_NAME: str = "NoCodeML API"
-    APP_VERSION: str = "3.0.0-rc.1"
+    APP_VERSION: str = "3.0.0-rc.2"
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
 
-    # Database (legacy V3 persistence while guest-session migration is in progress)
-    DATABASE_URL: str = "sqlite+aiosqlite:///./nocodeml.db"
+    # Optional legacy compatibility. The public V3 runtime does not connect to
+    # or write visitor data into this database.
+    DATABASE_URL: str = "sqlite+aiosqlite:////tmp/nocodeml-legacy.db"
     DB_SCHEMA: str = "nocodeml"
 
-    # Temporary guest workspaces. Raw session tokens are never used as folder names.
+    # Temporary guest workspaces. Raw session tokens are never folder names.
     SESSION_ROOT_DIR: str = "/tmp/nocodeml-sessions"
     SESSION_TTL_MINUTES: int = 60
     SESSION_CLEANUP_INTERVAL_SECONDS: int = 300
     SESSION_CLOSE_GRACE_SECONDS: int = 30
 
-    # Bounded guest training capacity for a single-instance deployment.
+    # Bounded in-process ML capacity for the single-instance guest backend.
     WORKSPACE_TRAINING_WORKERS: int = 1
     WORKSPACE_MAX_MODELS_PER_RUN: int = 8
 
-    # Local artifact staging/storage. These legacy paths remain while dataset,
-    # training and prediction services are migrated to the session workspace.
-    DATASETS_DIR: str = "./datasets"
-    MODELS_DIR: str = "./models"
-    PREDICTIONS_DIR: str = "./predictions"
+    # Legacy/local artifact settings retained for archived services only.
+    DATASETS_DIR: str = "/tmp/nocodeml-legacy/datasets"
+    MODELS_DIR: str = "/tmp/nocodeml-legacy/models"
+    PREDICTIONS_DIR: str = "/tmp/nocodeml-legacy/predictions"
     ARTIFACT_CACHE_DIR: str = "/tmp/nocodeml-artifacts"
-
-    # Artifact backend: local for development, S3-compatible object storage for
-    # deployments with separate API/worker services.
     ARTIFACT_STORAGE_BACKEND: str = "local"
     S3_ENDPOINT_URL: str = ""
     S3_ACCESS_KEY_ID: str = ""
@@ -47,20 +48,18 @@ class Settings(BaseSettings):
     S3_REGION: str = "auto"
     S3_ADDRESSING_STYLE: str = "path"
 
-    # Redis/Celery (legacy during guest-session migration)
     CELERY_BROKER_URL: str = "memory://"
     CELERY_RESULT_BACKEND: str = "cache+memory://"
 
-    # JWT Authentication (legacy during guest-session migration)
-    SECRET_KEY: str = "local-development-key-change-before-deployment"
+    # Legacy auth modules are not mounted in the V3 public API.
+    SECRET_KEY: str = "legacy-auth-disabled-in-v3-guest-runtime"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    # Data Science Assistant (server-side only)
+    # Data Science Assistant. Key remains server-side only.
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.7-flash"
 
-    # CORS - comma-separated list of allowed origins
     BACKEND_CORS_ORIGINS: str = (
         "http://localhost:5173,"
         "http://127.0.0.1:5173,"
@@ -70,7 +69,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> List[str]:
-        return [o.strip().rstrip("/") for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
+        return [origin.strip().rstrip("/") for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
 
     @property
     def is_postgres(self) -> bool:
@@ -96,16 +95,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_safety(self):
-        if not re.fullmatch(r"[a-z_][a-z0-9_]*", self.DB_SCHEMA):
-            raise ValueError("DB_SCHEMA must be a safe lowercase PostgreSQL identifier")
-
-        for field_name in (
-            "SESSION_ROOT_DIR",
-            "DATASETS_DIR",
-            "MODELS_DIR",
-            "PREDICTIONS_DIR",
-            "ARTIFACT_CACHE_DIR",
-        ):
+        for field_name in ("SESSION_ROOT_DIR", "DATASETS_DIR", "MODELS_DIR", "PREDICTIONS_DIR", "ARTIFACT_CACHE_DIR"):
             value = getattr(self, field_name).strip()
             if not value:
                 raise ValueError(f"{field_name} cannot be empty")
@@ -143,15 +133,6 @@ class Settings(BaseSettings):
             if missing:
                 raise ValueError(f"Missing S3 artifact settings: {', '.join(missing)}")
 
-        # This constraint is intentionally retained until the last persistent
-        # services have been migrated. The final guest-only release removes it.
-        if self.ENVIRONMENT.lower() == "production":
-            if self.SECRET_KEY == "local-development-key-change-before-deployment" or len(self.SECRET_KEY) < 32:
-                raise ValueError("A strong SECRET_KEY is required in production")
-            if not self.is_postgres:
-                raise ValueError("Production NoCodeML still requires PostgreSQL during the guest-session migration")
-            if self.DB_SCHEMA != "nocodeml":
-                raise ValueError("Production NoCodeML must use the isolated 'nocodeml' schema")
         return self
 
 

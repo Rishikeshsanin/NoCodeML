@@ -1,156 +1,188 @@
 # NoCodeML V3
 
-> A full-stack no-code machine learning workspace for exploring datasets, configuring experiments, comparing models, understanding results, and making predictions without writing ML code.
+> Upload a dataset, understand it, train and compare machine-learning models, make predictions, download the outputs, and leave. No account required and no permanent visitor workspace.
 
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Python_3.11-009688?logo=fastapi&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-SQLAlchemy-4169E1?logo=postgresql&logoColor=white)
-![Celery](https://img.shields.io/badge/Celery-Redis-37814A?logo=celery&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
 ![CI](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?logo=githubactions&logoColor=white)
 
-## Release status
+## What V3 is
 
-NoCodeML V3 is being developed on **`release/v3-revival`**. The original V2 code remains preserved on `main` and the dedicated **`legacy/v2-2026-08-22`** branch until V3 completes production validation.
+NoCodeML V3 is a guest-first AutoML workspace built for a simple lifecycle:
 
-The V3 branch currently passes automated frontend and backend CI. A public production deployment will be added only after the complete authenticated workflow has been tested end to end.
+```text
+Open NoCodeML
+    ↓
+Upload dataset
+    ↓
+Explore + ML Readiness
+    ↓
+Choose target / task / features / models
+    ↓
+Train + compare
+    ↓
+Predict
+    ↓
+Download useful outputs
+    ↓
+Leave / clear session
+    ↓
+Temporary workspace removed
+```
 
-## Why V3 exists
+There is **no mandatory signup or login** in the public V3 workflow.
 
-The earlier project had a substantial React/FastAPI/Celery ML architecture, but several pieces had aged or drifted apart: database migrations were incomplete, frontend/backend training contracts did not match, the AI assistant used an obsolete browser-side provider integration, prediction preprocessing could differ from training preprocessing, deployment configuration was fragile, and several screens still behaved like a student prototype.
+Visitor datasets, generated models, training state, predictions and exports are **not written to PostgreSQL/Supabase**. They live only inside an isolated temporary session workspace on the backend.
 
-V3 keeps the useful architecture and rebuilds the unreliable edges around it.
+## Privacy-by-lifecycle design
 
-## What you can do
+Each browser session receives a cryptographically random token. The raw token is never used as a server directory name; NoCodeML stores the workspace under a SHA-256 digest of the token.
 
-### 1. Manage datasets
+A workspace contains only temporary folders such as:
 
-- Upload CSV, Excel (`.xlsx` / `.xls`) and Parquet datasets.
-- Stream uploads with a **100 MB server-side limit** instead of buffering unbounded files.
-- Preview rows and inspect metadata before creating experiments.
-- Rename and delete user-owned datasets safely.
-- Prevent dataset deletion while dependent experiments still exist.
-- Store artifacts locally during development or in private S3-compatible object storage in production.
+```text
+/tmp/nocodeml-sessions/<hashed-session>/
+├── datasets/
+├── analysis/
+├── training/
+├── models/
+├── predictions/
+└── exports/
+```
 
-### 2. Understand data before training
+Cleanup has multiple layers:
 
-The Analysis workspace includes:
+- **Clear & restart** deletes the current workspace immediately.
+- Browser close/navigation sends a best-effort cleanup signal with a short grace period so normal refreshes do not destroy work accidentally.
+- Inactive sessions expire automatically (60 minutes by default).
+- A cleanup loop removes expired/orphaned workspaces.
+- Active ML jobs hold a temporary cleanup lease so files are not deleted halfway through training.
 
-- column types and sample values;
-- missing-value analysis;
-- descriptive statistics;
-- correlations;
-- histograms, scatter plots, box plots, categorical bar charts and correlation views;
-- conservative ID-column detection;
-- an **ML Readiness score** based on dataset size, missingness, constant columns and high-cardinality features;
-- target suggestions with transparent classification/regression heuristics.
+A browser cannot guarantee that a final network request is delivered when a tab or laptop disappears unexpectedly, so inactivity expiry is the hard cleanup fallback.
 
-V3 deliberately avoids the old “every unique column is an ID” heuristic so valid continuous features are not silently discarded.
+## Guided workspace
 
-### 3. Use Smart AutoML Setup
+The production UI is intentionally one coherent flow instead of an account/project CRUD dashboard.
 
-Smart Setup can build a strong editable baseline from the dataset:
+### 1. Data
 
-- infer classification vs regression from the chosen target;
-- support categorical targets and low-cardinality numeric labels such as `0/1`;
-- exclude likely IDs and unusable columns;
-- recommend features;
-- choose an appropriate train/test ratio;
-- select a comparison set of available models;
-- enable explainable expert-system optimization.
+- CSV, Excel (`.xlsx` / `.xls`) and Parquet uploads.
+- Server-side 100 MB upload limit.
+- Safe generated storage names; original filenames do not control server paths.
+- Row/column counts and metadata.
+- Dataset selection within the current temporary session.
 
-Nothing is hidden or locked. Every Smart Setup decision remains visible and editable.
+### 2. Explore
 
-### 4. Train and compare real models
+- ML Readiness score.
+- Missing-value analysis.
+- Descriptive statistics.
+- Conservative ID-column detection.
+- Correlations.
+- Histogram, scatter, box, bar and correlation visualizations.
+- Chart PNG export through Plotly with readable NoCodeML filenames.
+- EDA JSON, statistics CSV, missing-values CSV and correlations CSV downloads.
 
-NoCodeML currently exposes eight model choices:
+### 3. Configure
 
-| Task | Models |
+NoCodeML provides editable guidance for:
+
+- likely target columns;
+- classification vs regression;
+- usable features;
+- train/test split;
+- suitable model defaults.
+
+Users can override those suggestions when domain knowledge says otherwise.
+
+### 4. Train & compare
+
+Eight models are supported:
+
+| Classification | Regression |
 | --- | --- |
-| Classification | Logistic Regression, Random Forest Classifier, XGBoost Classifier, LightGBM Classifier |
-| Regression | Linear Regression, Random Forest Regressor, XGBoost Regressor, LightGBM Regressor |
+| Logistic Regression | Linear Regression |
+| Random Forest Classifier | Random Forest Regressor |
+| XGBoost Classifier | XGBoost Regressor |
+| LightGBM Classifier | LightGBM Regressor |
 
-Training runs are asynchronous through **Celery + Redis**. Each run stores an immutable configuration snapshot, progress, model-level results, timestamps and artifacts.
+The guest release uses a **bounded in-process training pool** instead of requiring Celery/Redis infrastructure. By default only one training run is active per session and global worker count is intentionally small for safe free/small deployments.
 
-The V3 worker honors the saved train/test split and random seed, resolves current and legacy hyperparameter shapes safely, and fails the run if every selected model fails instead of reporting a misleading successful completion.
+Training writes status, metrics and model artifacts only into the active temporary workspace.
 
-### 5. Keep preprocessing consistent
+Downloads include:
 
-One of the most important V3 fixes is inference correctness.
+- model comparison CSV;
+- training summary JSON;
+- feature importance CSV;
+- best fitted model (`.joblib`).
 
-Training now builds a fitted scikit-learn pipeline with:
+### 5. Correct preprocessing and inference
+
+Training builds a fitted scikit-learn pipeline containing:
 
 - median imputation for numerical features;
 - optional numerical scaling;
 - most-frequent imputation for categorical features;
-- `OneHotEncoder(handle_unknown="ignore")` for categorical values;
-- the trained estimator;
-- the fitted target label encoder for classification.
+- `OneHotEncoder(handle_unknown="ignore")`;
+- the estimator;
+- fitted classification label decoder where needed.
 
-That entire fitted pipeline is persisted with the model. Prediction reuses it directly instead of recreating category mappings from prediction input.
+Prediction reuses that exact fitted pipeline. NoCodeML does **not** create a new category encoder from prediction input.
 
-### 6. Interpret results
+### 6. Predict & export
 
-Each run can show:
+- Single-row predictions.
+- Classification probability/confidence where available.
+- Batch CSV prediction.
+- Downloadable prediction CSVs with readable filenames.
+- Complete session ZIP export.
 
-- train and test metrics;
-- best-model selection;
-- classification accuracy, precision, recall, F1 and ROC-AUC where available;
-- regression R², MAE, RMSE and MSE;
-- cross-validation information;
-- confusion matrices;
-- feature importance;
-- train-vs-test generalization checks;
-- expert-optimization rules and final hyperparameters;
-- failed-model diagnostics.
+Example names:
 
-A completed run can also export a **sanitized reproducibility JSON report** containing the configuration snapshot and result data without exposing artifact paths or credentials.
+```text
+nocodeml_customer-churn_statistics_20260822-171400.csv
+nocodeml_customer-churn_feature-importance_20260822-171400.csv
+nocodeml_customer-churn_predictions_20260822-171400.csv
+nocodeml_customer-churn_best-model_20260822-171400.joblib
+nocodeml_customer-churn_session_20260822-171400.zip
+```
 
-### 7. Make predictions
+## Data Science Assistant
 
-The Prediction workspace supports:
+The floating assistant is optional and server-side.
 
-- interactive single-row predictions;
-- typed numeric and categorical inputs;
-- valid zero-valued inputs;
-- classification probabilities and confidence where supported;
-- batch CSV prediction up to 100 MB;
-- downloadable prediction CSVs;
-- authenticated prediction history.
+It is authenticated by the temporary session token, not by a user account. The assistant context is deliberately built from **derived workspace information** such as dataset shape, configuration, metrics and model results. Raw uploaded dataset rows are not automatically injected into provider requests.
 
-Batch outputs preserve the original input columns and append prediction/confidence fields.
-
-### 8. Ask the Data Science Assistant
-
-The assistant is grounded in the active experiment phase, EDA, configuration, training state and results.
-
-The provider request is made **server-side**. API credentials are never placed in `VITE_*` browser variables. If no AI provider key is configured, the API fails safely and the core ML product continues to work.
+If `GEMINI_API_KEY` is not configured, the assistant fails safely while the core ML workflow continues to work.
 
 ## Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│                    React + TypeScript UI                     │
-│  Datasets → Analysis → Configure → Train → Results → Predict │
-└──────────────────────────────┬───────────────────────────────┘
-                               │ authenticated REST
-                               ▼
-┌──────────────────────────────────────────────────────────────┐
-│                         FastAPI API                          │
-│ Auth · Datasets · EDA · Experiments · Training · Prediction │
-│                    AI Assistant proxy                        │
-└───────────────┬───────────────────────┬──────────────────────┘
-                │                       │
-                ▼                       ▼
-     PostgreSQL / SQLAlchemy       Redis task broker
-     isolated `nocodeml` schema          │
-                │                         ▼
-                │                  Celery V3 worker
-                │                         │
-                └──────────────┬──────────┘
-                               ▼
-                    ML artifact storage
-              local filesystem or private S3
+┌────────────────────────────────────────────────────────────┐
+│                 React + TypeScript + Vite                 │
+│  Data → Explore → Configure → Train → Predict & Export    │
+└────────────────────────────┬───────────────────────────────┘
+                             │ X-NoCodeML-Session
+                             ▼
+┌────────────────────────────────────────────────────────────┐
+│                         FastAPI                            │
+│ Session API · Workspace API · Models · Optional AI proxy  │
+└────────────────────────────┬───────────────────────────────┘
+                             │
+                             ▼
+              isolated temporary session folder
+            datasets / analysis / models / exports
+                             │
+                             ▼
+                  bounded in-process ML pool
+
+No visitor PostgreSQL database
+No visitor account store
+No Redis/Celery runtime requirement
+No persistent application volume required
 ```
 
 ## Technology stack
@@ -159,63 +191,45 @@ The provider request is made **server-side**. API credentials are never placed i
 | --- | --- |
 | Frontend | React 18, TypeScript, Vite, React Router |
 | UI | Tailwind CSS, shadcn/ui, Radix UI, Lucide |
-| Data visualization | Recharts + Plotly-compatible API data |
+| Charts | Plotly |
 | Backend | FastAPI, Pydantic, HTTPX |
-| ORM / database | SQLAlchemy 2, PostgreSQL, Alembic |
-| Authentication | bcrypt + signed JWT bearer tokens |
-| Background training | Celery + Redis |
 | ML | scikit-learn, XGBoost, LightGBM |
-| Data processing | pandas, NumPy, PyArrow, OpenPyXL |
-| Model persistence | joblib + private artifact store abstraction |
-| Optional AI | server-side Gemini integration |
-| Local runtime | Docker + Docker Compose |
-| Quality | TypeScript typecheck, ESLint, pytest, GitHub Actions |
+| Data | pandas, NumPy, PyArrow, OpenPyXL |
+| Model format | joblib |
+| Optional AI | server-side Gemini |
+| Local runtime | Docker / Docker Compose |
+| Quality | TypeScript, ESLint, pytest, GitHub Actions |
 
-## Database isolation
+## Supabase / legacy database note
 
-This repository is registered in the shared Supabase **Project Hub** using:
+During the V3 revival an isolated `nocodeml` schema was created under the shared Project Hub. It remains documented and isolated, but **the guest-first V3 runtime does not use it for visitor work**.
 
-```text
-app slug: nocodeml
-schema:   nocodeml
-```
-
-NoCodeML application tables must stay inside `nocodeml.*`.
-
-Before database work, contributors/agents should read:
+The project safety documents remain in the repository:
 
 - [`AGENTS.md`](./AGENTS.md)
 - [`SUPABASE_HUB_RULES.md`](./SUPABASE_HUB_RULES.md)
 
-The application must not create cross-project foreign keys or read/write another application's schema.
+Those rules still prohibit cross-project database access. The old migration/auth/persistence implementation is preserved in Git history and checkpoint branches rather than exposed by the public V3 API.
 
-## Database migrations
+## Public API surface
 
-The repaired V3 Alembic chain is:
+The public release intentionally mounts only non-persistent routes:
 
-```text
-000  users
- ↓
-001  datasets
- ↓
-002  experiments
- ↓
-003  training jobs/results/logs
- ↓
-004  run-based training
- ↓
-005  prediction batches
-```
+| Area | Endpoint examples |
+| --- | --- |
+| Temporary session | `POST /api/v1/session`, `POST /api/v1/session/heartbeat`, `DELETE /api/v1/session` |
+| Temporary datasets | `POST /api/v1/workspace/datasets`, preview / EDA / plot / delete routes |
+| Temporary training | `POST /api/v1/workspace/training/runs`, `GET /api/v1/workspace/training/runs/{id}` |
+| Prediction | single + batch workspace prediction routes |
+| Exports | EDA, training, prediction and complete-session downloads |
+| Models | `GET /api/v1/models` |
+| Optional AI | `POST /api/v1/assistant/chat` |
 
-The missing users migration from V2 is restored, and PostgreSQL migration/version state is scoped to the configured NoCodeML schema.
+Legacy `/auth`, persistent `/datasets`, `/experiments`, persistent `/training` and persistent `/predictions` routes are not mounted in the guest release.
+
+FastAPI documentation is available at `/docs` while the backend is running.
 
 ## Local development
-
-### Requirements
-
-- Docker Desktop / Docker Compose
-- Node.js 24 recommended for parity with CI
-- npm
 
 ### Backend
 
@@ -223,23 +237,21 @@ The missing users migration from V2 is restored, and PostgreSQL migration/versio
 git clone https://github.com/Rishikeshsanin/NoCodeML.git
 cd NoCodeML
 git switch release/v3-revival
-
 cd Backend
 cp .env.example .env
-# Edit .env for your local environment.
-
 docker compose up --build
 ```
 
-The local Compose stack uses NoCodeML-specific service/container/volume names so it does not collide with other local projects.
-
-Backend endpoints:
+Backend:
 
 ```text
 API:    http://localhost:8000
 Docs:   http://localhost:8000/docs
 Health: http://localhost:8000/health
+Ready:  http://localhost:8000/ready
 ```
+
+The V3 Compose file runs only the API and uses tmpfs for visitor workspaces. It does not start Postgres, Redis or Celery.
 
 ### Frontend
 
@@ -250,132 +262,112 @@ npm ci
 npm run dev
 ```
 
-Frontend:
-
 ```text
 http://localhost:5173
 ```
 
-## Environment variables
-
-### Backend
-
-Use `Backend/.env.example` as the source of truth.
-
-Important production values include:
-
-```env
-ENVIRONMENT=production
-DATABASE_URL=postgresql+psycopg://...
-DB_SCHEMA=nocodeml
-CELERY_BROKER_URL=redis://...
-CELERY_RESULT_BACKEND=redis://...
-SECRET_KEY=<strong-random-server-secret>
-BACKEND_CORS_ORIGINS=https://your-frontend.example
-GEMINI_API_KEY=<server-side-only-if-used>
-GEMINI_MODEL=gemini-3.7-flash
-```
-
-Optional private object storage uses the S3-compatible variables documented in the backend environment template.
-
-### Frontend
+Frontend environment:
 
 ```env
 VITE_API_URL=http://localhost:8000
 ```
 
-`VITE_*` values are public browser configuration. Never place database passwords, JWT signing secrets or AI provider secrets there.
+`VITE_*` values are public browser configuration. Never put private provider credentials there.
 
-## API surface
+Backend production environment is intentionally small:
 
-The current V3 workflow is primarily under `/api/v1`:
+```env
+ENVIRONMENT=production
+SESSION_ROOT_DIR=/tmp/nocodeml-sessions
+SESSION_TTL_MINUTES=60
+SESSION_CLEANUP_INTERVAL_SECONDS=300
+SESSION_CLOSE_GRACE_SECONDS=30
+WORKSPACE_TRAINING_WORKERS=1
+WORKSPACE_MAX_MODELS_PER_RUN=8
+BACKEND_CORS_ORIGINS=https://your-frontend.example
+GEMINI_API_KEY=optional-server-side-key
+GEMINI_MODEL=gemini-3.7-flash
+```
 
-| Area | Examples |
-| --- | --- |
-| Auth | `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me` |
-| Datasets | `GET/POST /api/v1/datasets/`, `GET /api/v1/datasets/{id}/preview` |
-| EDA | `GET /api/v1/datasets/{id}/eda`, `POST /api/v1/datasets/{id}/plot` |
-| Experiments | `GET/POST /api/v1/experiments/`, `PUT /api/v1/experiments/{id}` |
-| Models | `GET /api/v1/models`, `GET /api/v1/models/{task_type}` |
-| Training runs | `POST /api/v1/training/experiments/{id}/runs`, `GET /api/v1/training/runs/{run_id}` |
-| Predictions | `POST /api/v1/predictions/experiments/{id}/predict/single`, batch/history/download routes |
-| AI assistant | `POST /api/v1/assistant/chat` |
-
-FastAPI exposes the complete interactive schema at `/docs` while the backend is running.
+No `DATABASE_URL`, PostgreSQL, Supabase, Redis or Celery service is required for the public guest workflow.
 
 ## Automated validation
 
-GitHub Actions runs on the release branch and pull requests.
+GitHub Actions validates:
 
-Frontend checks:
+### Frontend
 
 ```text
 npm ci
 TypeScript typecheck
 Vite production build
 ESLint
-npm critical-vulnerability audit
+critical npm vulnerability audit
 ```
 
-Backend checks:
+### Backend
 
 ```text
 Python compile
-Alembic history validation
-pytest smoke + ML pipeline + worker-config + EDA regression tests
+full pytest suite
+guest-session isolation and cleanup
+real classification workflow
+real regression workflow
+single/batch prediction
+export/download behavior
+production Docker image
+non-root container runtime
+/health + /ready + temporary-session container smoke test
+ARM64 ML compatibility
 ```
 
-The ML tests include mixed numeric/categorical classification and regression, persisted preprocessing, unseen categories at inference, numeric `0/1` classification labels, train/test split semantics and conservative ID detection.
+The real ML tests cover mixed numerical/categorical data, persisted preprocessing, unseen categories, classification and regression.
 
-## Security / reliability decisions in V3
+## Error and resource guardrails
 
-- Production startup rejects the default JWT signing key.
-- Production PostgreSQL is restricted to `DB_SCHEMA=nocodeml`.
-- User emails are normalized before registration/login.
-- Duplicate registration races return a controlled conflict.
-- Passwords are bounded to bcrypt's supported byte length.
-- Dataset and experiment queries are ownership-scoped.
-- Dataset filenames do not control server filesystem paths.
-- AI credentials remain server-side.
-- Model artifacts reuse the exact fitted training preprocessing at inference.
-- Training config snapshots are immutable per run.
-- Object-storage exports use private artifacts/presigned access rather than public buckets.
+The application includes controlled handling for malformed/empty uploads, unsupported file types, oversized files, invalid targets/features, model failures, prediction schema mismatches, expired sessions and unavailable AI.
+
+Resource defaults are intentionally conservative for public college-project hosting:
+
+- upload size: **100 MB**;
+- idle session: **60 minutes**;
+- active training runs per session: **1**;
+- global training pool: **bounded**;
+- models per run: **up to 8**.
 
 ## Repository branches
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Original V2 state until V3 release is approved |
-| `legacy/v2-2026-08-22` | Explicit permanent V2 recovery branch |
-| `release/v3-revival` | Active V3 development and validation |
+| `main` | Original V2 until the V3 release is merged |
+| `legacy/v2-2026-08-22` | Permanent V2 recovery point |
+| `checkpoint/v3-rc-persistent-2026-08-22` | Working persistence-based V3 RC before guest refactor |
+| `release/v3-revival` | Guest-first V3 release candidate |
 
-V3 will merge into `main` only after production environment configuration and the complete end-to-end user journey pass.
+## Release checklist
 
-## Current V3 validation checklist
-
-- [x] Preserve legacy release
-- [x] Isolate Supabase schema
-- [x] Repair migration chain
-- [x] Repair training status contract
-- [x] Persist fitted preprocessing with models
-- [x] Smart AutoML setup
-- [x] ML readiness analysis
-- [x] Responsive V3 UI pass
-- [x] Server-side AI assistant
-- [x] Single + batch prediction hardening
-- [x] Reproducibility report export
-- [x] Automated frontend/backend CI
-- [x] Real ML pipeline regression tests
-- [ ] Configure production backend secrets/services
-- [ ] Deploy V3 preview
-- [ ] Execute authenticated end-to-end classification test
-- [ ] Execute authenticated end-to-end regression test
-- [ ] Mobile + desktop production QA
-- [ ] Merge V3 to `main`
+- [x] Preserve V2 and the persistence-based V3 checkpoint
+- [x] Repair ML preprocessing/inference correctness
+- [x] ML Readiness + Smart target/task/model guidance
+- [x] Anonymous temporary sessions
+- [x] Session isolation and automatic cleanup
+- [x] Database-free dataset + EDA workflow
+- [x] Database-free classification/regression training
+- [x] Temporary single + batch prediction
+- [x] Download/export engine and readable filenames
+- [x] Guest-first routing with no signup wall
+- [x] Guest-session AI assistant
+- [x] Remove persistent routes from the public API
+- [x] Remove Postgres/Redis/Celery from the public runtime architecture
+- [ ] Green final CI on the release head
+- [ ] Production backend deployment
+- [ ] Vercel frontend deployment
+- [ ] Live classification + regression E2E QA
+- [ ] Merge to `main`
 - [ ] Tag `v3.0.0`
 
 ## Project philosophy
 
 **Quality > quantity.**
 
-NoCodeML V3 is intentionally focused on a coherent, explainable ML workflow rather than adding unrelated AI features. Smart automation should reduce repetitive setup while keeping the model, features, split, metrics and optimization decisions visible to the user.
+NoCodeML is intentionally a coherent ML utility rather than a collection of unrelated AI features. The product should make the workflow easier without hiding what target, features, model, split and metrics were actually used.

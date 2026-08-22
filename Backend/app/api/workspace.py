@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.api.session import SessionToken
@@ -19,6 +20,12 @@ from app.services.workspace_dataset_service import (
 from app.services.workspace_eda_service import (
     generate_workspace_plot_data,
     get_workspace_eda_summary,
+)
+from app.services.workspace_prediction_service import (
+    list_predictions,
+    predict_batch,
+    predict_single,
+    prediction_download,
 )
 from app.services.workspace_training_service import workspace_training_runner
 
@@ -47,6 +54,10 @@ class WorkspaceTrainingRequest(BaseModel):
     random_state: int = Field(default=42, ge=0, le=2_147_483_647)
     cv_folds: int = Field(default=3, ge=2, le=5)
     scaling: bool = True
+
+
+class WorkspaceSinglePredictionRequest(BaseModel):
+    features: dict[str, Any]
 
 
 @router.post("/datasets", status_code=status.HTTP_201_CREATED)
@@ -129,3 +140,33 @@ def list_training_runs(token: SessionToken):
 @router.get("/training/runs/{run_id}")
 def get_training_run(run_id: str, token: SessionToken):
     return workspace_training_runner.get(token, run_id)
+
+
+@router.post("/training/runs/{run_id}/predict")
+def single_prediction(run_id: str, payload: WorkspaceSinglePredictionRequest, token: SessionToken):
+    return predict_single(token, run_id, payload.features)
+
+
+@router.post("/training/runs/{run_id}/predict/batch", status_code=status.HTTP_201_CREATED)
+async def batch_prediction(
+    run_id: str,
+    token: SessionToken,
+    file: Annotated[UploadFile, File(...)],
+):
+    return await predict_batch(token, run_id, file)
+
+
+@router.get("/predictions")
+def prediction_history(token: SessionToken):
+    predictions = list_predictions(token)
+    return {"predictions": predictions, "total": len(predictions), "temporary": True}
+
+
+@router.get("/predictions/{prediction_id}/download")
+def download_prediction(prediction_id: str, token: SessionToken):
+    file_path, download_name = prediction_download(token, prediction_id)
+    return FileResponse(
+        path=file_path,
+        media_type="text/csv",
+        filename=download_name,
+    )

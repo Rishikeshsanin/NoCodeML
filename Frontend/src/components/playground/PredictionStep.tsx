@@ -1,148 +1,165 @@
 import { useState } from "react";
-import { Sparkles, Upload, Download, AlertCircle, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  History,
+  Loader2,
+  Sparkles,
+  Upload,
+} from "lucide-react";
+
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
 import { useExperiment } from "@/contexts/ExperimentContext";
+import { useToast } from "@/hooks/use-toast";
 import { predictionAPI } from "@/services/apiService";
+
+interface SinglePredictionResult {
+  prediction: string;
+  confidence?: number | null;
+  probabilities?: Record<string, number> | null;
+}
+
+interface BatchPredictionResult {
+  prediction_id: string;
+  total_predictions: number;
+  download_url: string;
+}
+
+interface PredictionHistoryItem {
+  id: string;
+  total_predictions: number;
+  created_at: string;
+}
+
+const MAX_BATCH_MB = 100;
+
+const messageFromError = (error: any, fallback: string) =>
+  error?.response?.data?.detail || error?.message || fallback;
 
 const PredictionStep = () => {
   const { currentExperiment } = useExperiment();
   const { toast } = useToast();
-  
-  const [loading, setLoading] = useState(false);
-  const [predictionResult, setPredictionResult] = useState<any>(null);
-  const [batchResult, setBatchResult] = useState<any>(null);
-  const [inputValues, setInputValues] = useState<Record<string, any>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [predictionHistory, setPredictionHistory] = useState<any[]>([]);
+
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const [predictionResult, setPredictionResult] = useState<SinglePredictionResult | null>(null);
+  const [batchResult, setBatchResult] = useState<BatchPredictionResult | null>(null);
+  const [predictionHistory, setPredictionHistory] = useState<PredictionHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  
-  // Get feature names from experiment config
+  const [singleLoading, setSingleLoading] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const selectedFeatures = currentExperiment?.config?.selectedFeatures || [];
-  
+  const numericFeatures = new Set(currentExperiment?.config?.featureTypes?.numerical || []);
+  const hasCompletedResult = Boolean(currentExperiment?.results) || currentExperiment?.status === "completed";
+
   const handleSinglePredict = async () => {
-    if (!currentExperiment) {
-      setError("No experiment selected");
+    if (!currentExperiment) return;
+
+    const missingFeatures = selectedFeatures.filter((feature) => {
+      const value = inputValues[feature];
+      return value === undefined || value.trim() === "";
+    });
+    if (missingFeatures.length) {
+      setError(`Fill in all required features: ${missingFeatures.join(", ")}`);
       return;
     }
-    
-    // Validate all features are filled
-    const missingFeatures = selectedFeatures.filter(feature => !inputValues[feature]);
-    if (missingFeatures.length > 0) {
-      setError(`Please fill in all features: ${missingFeatures.join(", ")}`);
+
+    const features = Object.fromEntries(
+      selectedFeatures.map((feature) => {
+        const raw = inputValues[feature];
+        return [feature, numericFeatures.has(feature) ? Number(raw) : raw];
+      }),
+    );
+
+    if (selectedFeatures.some((feature) => numericFeatures.has(feature) && Number.isNaN(features[feature]))) {
+      setError("One or more numerical features contain an invalid number.");
       return;
     }
-    
-    setLoading(true);
+
+    setSingleLoading(true);
     setError(null);
-    
     try {
-      // Convert values to numbers where appropriate
-      const features = Object.fromEntries(
-        Object.entries(inputValues).map(([key, value]) => [key, isNaN(Number(value)) ? value : Number(value)])
-      );
-      
-      const result = await predictionAPI.single(currentExperiment.id, features);
+      const result = (await predictionAPI.single(currentExperiment.id, features)) as SinglePredictionResult;
       setPredictionResult(result);
-      
-      toast({ 
-        title: "Prediction Complete!", 
-        description: `Result: ${result.prediction}` 
-      });
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || error.message || "Unknown error";
-      setError(errorMsg);
-      toast({ 
-        title: "Prediction Failed", 
-        description: errorMsg,
-        variant: "destructive" 
-      });
+      toast({ title: "Prediction complete", description: `Predicted value: ${result.prediction}` });
+    } catch (predictionError: any) {
+      const message = messageFromError(predictionError, "Prediction failed.");
+      setError(message);
+      toast({ title: "Prediction failed", description: message, variant: "destructive" });
     } finally {
-      setLoading(false);
+      setSingleLoading(false);
     }
   };
-  
+
   const handleBatchPredict = async (file: File) => {
-    if (!currentExperiment) {
-      setError("No experiment selected");
+    if (!currentExperiment) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setError("Batch prediction currently accepts CSV files only.");
       return;
     }
-    
-    setLoading(true);
+    if (file.size > MAX_BATCH_MB * 1024 * 1024) {
+      setError(`Batch CSV files must be ${MAX_BATCH_MB} MB or smaller.`);
+      return;
+    }
+
+    setBatchLoading(true);
     setError(null);
-    
     try {
-      const result = await predictionAPI.batch(currentExperiment.id, file);
+      const result = (await predictionAPI.batch(currentExperiment.id, file)) as BatchPredictionResult;
       setBatchResult(result);
-      
-      toast({ 
-        title: "Batch Prediction Complete!", 
-        description: `${result.total_predictions} predictions made` 
-      });
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || error.message || "Unknown error";
-      setError(errorMsg);
-      toast({ 
-        title: "Batch Prediction Failed", 
-        description: errorMsg,
-        variant: "destructive" 
-      });
+      toast({ title: "Batch prediction complete", description: `${result.total_predictions.toLocaleString()} rows predicted.` });
+    } catch (predictionError: any) {
+      const message = messageFromError(predictionError, "Batch prediction failed.");
+      setError(message);
+      toast({ title: "Batch prediction failed", description: message, variant: "destructive" });
     } finally {
-      setLoading(false);
+      setBatchLoading(false);
     }
   };
-  
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.name.endsWith('.csv')) {
-        setError("Please upload a CSV file");
-        return;
-      }
-      handleBatchPredict(file);
-    }
-  };
-  
+
   const handleDownload = async (predictionId?: string) => {
     const id = predictionId || batchResult?.prediction_id;
-    if (id) {
-      try {
-        await predictionAPI.download(id);
-      } catch (err) {
-        console.error('Download failed:', err);
-        setError('Failed to download predictions. Please try again.');
-      }
+    if (!id) return;
+    try {
+      await predictionAPI.download(id);
+    } catch (downloadError: any) {
+      const message = messageFromError(downloadError, "Prediction download failed.");
+      setError(message);
     }
   };
-  
+
   const loadPredictionHistory = async () => {
     if (!currentExperiment) return;
-    
+    setHistoryLoading(true);
     try {
       const result = await predictionAPI.getHistory(currentExperiment.id);
       setPredictionHistory(result.predictions || []);
       setShowHistory(true);
-    } catch (err) {
-      console.error('Failed to load history:', err);
+    } catch (historyError: any) {
+      setError(messageFromError(historyError, "Could not load prediction history."));
+    } finally {
+      setHistoryLoading(false);
     }
   };
-  
+
   if (!currentExperiment) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            No experiment selected. Please create an experiment first.
-          </AlertDescription>
-        </Alert>
-      </div>
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>No experiment is selected.</AlertDescription>
+      </Alert>
     );
   }
-  
+
   return (
     <div className="space-y-6">
       {error && (
@@ -151,244 +168,206 @@ const PredictionStep = () => {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-2xl font-bold mb-6 flex items-center">
-          <Sparkles className="w-6 h-6 mr-2 text-primary" />
-          Make Predictions
-        </h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Single Prediction */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Single Prediction</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Enter feature values to get a prediction from your trained model
-            </p>
-            
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-              {selectedFeatures.length === 0 ? (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    No features configured. Please configure your experiment first.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                selectedFeatures.map((feature: string) => (
-                  <div key={feature}>
-                    <Label>{feature}</Label>
-                    <Input
-                      type="text"
-                      placeholder={`Enter ${feature}`}
-                      value={inputValues[feature] || ''}
-                      onChange={(e) => setInputValues({...inputValues, [feature]: e.target.value})}
-                      disabled={loading}
-                    />
-                  </div>
-                ))
-              )}
+
+      <Card className="overflow-hidden border-primary/25 bg-card/55">
+        <CardHeader className="border-b border-border/60 bg-gradient-to-r from-primary/[0.08] via-primary-purple/[0.05] to-primary-blue/[0.08]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-primary">
+                <Sparkles className="h-4 w-4" /> Prediction workspace
+              </div>
+              <CardTitle className="text-2xl">Use your best trained model</CardTitle>
+              <CardDescription className="mt-1">Run one prediction interactively or score an entire CSV using the same fitted preprocessing pipeline as training.</CardDescription>
             </div>
-            
-            <Button 
-              onClick={handleSinglePredict} 
-              disabled={loading || selectedFeatures.length === 0}
-              className="w-full gradient-primary text-background"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Predicting...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Predict
-                </>
-              )}
-            </Button>
+            <Badge variant="secondary" className="w-fit">{selectedFeatures.length} required features</Badge>
           </div>
-          
-          {/* Batch Prediction */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Batch Prediction</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Upload a CSV file with the same features as your training data
-            </p>
-            
-            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center space-y-4">
-              <Upload className="w-12 h-12 mx-auto text-primary" />
-              <div>
-                <p className="font-medium mb-1">Upload CSV for batch predictions</p>
-                <p className="text-sm text-muted-foreground">
-                  File must contain columns: {selectedFeatures.join(", ")}
-                </p>
-              </div>
-              
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileChange}
-                  disabled={loading}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  id="batch-file-input"
-                />
-                <Button 
-                  variant="outline" 
-                  disabled={loading}
-                  asChild
-                >
-                  <label htmlFor="batch-file-input" className="cursor-pointer">
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-4 h-4 mr-2" />
-                        Choose CSV File
-                      </>
-                    )}
-                  </label>
-                </Button>
-              </div>
-            </div>
-            
-            {batchResult && (
-              <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <h4 className="font-bold mb-2 text-green-700 dark:text-green-400">
-                  ✓ Batch Prediction Complete!
-                </h4>
-                <p className="text-sm">
-                  <strong>{batchResult.total_predictions}</strong> predictions generated successfully
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      {/* Single Prediction Result */}
-      {predictionResult && (
-        <div className="bg-gradient-to-r from-primary/10 via-primary-purple/10 to-primary-blue/10 border border-primary/30 rounded-xl p-6 animate-fade-in">
-          <h3 className="text-xl font-bold mb-4">Prediction Result</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Prediction Value */}
-            <div className="text-center p-6 bg-card rounded-lg shadow-sm">
-              <p className="text-sm text-muted-foreground mb-2">Prediction</p>
-              <p className="text-4xl font-bold text-primary">{predictionResult.prediction}</p>
-            </div>
-            
-            {/* Confidence Score */}
-            {predictionResult.confidence !== null && predictionResult.confidence !== undefined && (
-              <div className="text-center p-6 bg-card rounded-lg shadow-sm">
-                <p className="text-sm text-muted-foreground mb-2">Confidence</p>
-                <p className="text-4xl font-bold">
-                  {(predictionResult.confidence * 100).toFixed(1)}%
-                </p>
-                <div className="mt-3 w-full bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-primary to-primary-purple h-2 rounded-full transition-all"
-                    style={{ width: `${predictionResult.confidence * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            
-            {/* Class Probabilities */}
-            {predictionResult.probabilities && (
-              <div className="text-center p-6 bg-card rounded-lg shadow-sm">
-                <p className="text-sm text-muted-foreground mb-3">Class Probabilities</p>
-                <div className="space-y-2 text-sm">
-                  {Object.entries(predictionResult.probabilities).map(([key, value]) => (
-                    <div key={key} className="flex justify-between items-center">
-                      <span className="font-medium">{key}:</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 bg-muted rounded-full h-1.5">
-                          <div 
-                            className="bg-primary h-1.5 rounded-full"
-                            style={{ width: `${(value as number) * 100}%` }}
-                          />
-                        </div>
-                        <span className="font-semibold w-12 text-right">
-                          {((value as number) * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Input Summary */}
-          <div className="mt-6 p-4 bg-card/50 rounded-lg">
-            <p className="text-sm font-semibold mb-2 text-muted-foreground">Input Features:</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-              {Object.entries(inputValues).map(([key, value]) => (
-                <div key={key} className="flex justify-between">
-                  <span className="text-muted-foreground">{key}:</span>
-                  <span className="font-medium ml-2">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        </CardHeader>
+      </Card>
+
+      {!hasCompletedResult && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Predictions require at least one successful completed training run. If prediction fails, return to Train and Results first.
+          </AlertDescription>
+        </Alert>
       )}
-      
-      {/* Prediction History */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center">
-            <Download className="w-5 h-5 mr-2 text-primary" />
-            Prediction History
-          </h3>
-          <Button 
-            onClick={loadPredictionHistory}
-            variant="outline"
-            size="sm"
-          >
-            {showHistory ? 'Refresh' : 'Load History'}
-          </Button>
-        </div>
-        
-        {showHistory && (
-          <div className="space-y-2">
-            {predictionHistory.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No prediction history yet. Make batch predictions to see them here.
-              </p>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="border-border/70 bg-card/55">
+          <CardHeader>
+            <CardTitle className="text-xl">Single prediction</CardTitle>
+            <CardDescription>Enter one observation. Numerical features accept zero and decimal values normally.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {!selectedFeatures.length ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>Configure the experiment features before making predictions.</AlertDescription>
+              </Alert>
             ) : (
-              predictionHistory.map((pred) => (
-                <div 
-                  key={pred.id} 
-                  className="flex items-center justify-between p-3 bg-card/50 rounded-lg border border-border hover:border-primary/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">
-                      {pred.total_predictions} predictions
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(pred.created_at).toLocaleString()}
-                    </p>
+              <div className="grid max-h-[430px] gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
+                {selectedFeatures.map((feature: string) => {
+                  const numeric = numericFeatures.has(feature);
+                  return (
+                    <div key={feature} className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor={`predict-${feature}`} className="truncate">{feature}</Label>
+                        <Badge variant="outline" className="shrink-0 text-[10px]">{numeric ? "number" : "text/category"}</Badge>
+                      </div>
+                      <Input
+                        id={`predict-${feature}`}
+                        type={numeric ? "number" : "text"}
+                        step={numeric ? "any" : undefined}
+                        placeholder={numeric ? "0" : `Enter ${feature}`}
+                        value={inputValues[feature] ?? ""}
+                        onChange={(event) => {
+                          setInputValues((current) => ({ ...current, [feature]: event.target.value }));
+                          if (error) setError(null);
+                        }}
+                        disabled={singleLoading}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button
+              onClick={() => void handleSinglePredict()}
+              disabled={singleLoading || !selectedFeatures.length}
+              className="w-full gap-2"
+            >
+              {singleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {singleLoading ? "Predicting…" : "Predict"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 bg-card/55">
+          <CardHeader>
+            <CardTitle className="text-xl">Batch prediction</CardTitle>
+            <CardDescription>Upload a CSV containing all required feature columns. Extra columns are preserved in the exported result.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <label className="group flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-background/25 p-6 text-center transition hover:border-primary/50 hover:bg-primary/[0.03]">
+              {batchLoading ? <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" /> : <Upload className="mb-4 h-10 w-10 text-primary transition group-hover:-translate-y-0.5" />}
+              <div className="font-medium">{batchLoading ? "Processing CSV…" : "Choose a CSV file"}</div>
+              <p className="mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">
+                Required columns: {selectedFeatures.length ? selectedFeatures.join(", ") : "configure features first"}. Maximum file size: {MAX_BATCH_MB} MB.
+              </p>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                disabled={batchLoading || !selectedFeatures.length}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleBatchPredict(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+
+            {batchResult && (
+              <div className="rounded-2xl border border-success/30 bg-success/[0.06] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 font-medium text-success"><CheckCircle2 className="h-4 w-4" /> Batch complete</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{batchResult.total_predictions.toLocaleString()} predictions generated.</div>
                   </div>
-                  <Button
-                    onClick={() => handleDownload(pred.id)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <Download className="w-4 h-4 mr-1" />
-                    Download
+                  <Button variant="outline" className="gap-2" onClick={() => void handleDownload()}>
+                    <Download className="h-4 w-4" /> Download CSV
                   </Button>
                 </div>
-              ))
+              </div>
             )}
-          </div>
-        )}
+          </CardContent>
+        </Card>
       </div>
+
+      {predictionResult && (
+        <Card className="overflow-hidden border-primary/30 bg-gradient-to-br from-primary/[0.07] via-card to-primary-blue/[0.06]">
+          <CardHeader>
+            <CardTitle>Prediction result</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-2xl border border-border/60 bg-background/40 p-5">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Prediction</div>
+                <div className="mt-2 break-words text-3xl font-bold text-primary">{predictionResult.prediction}</div>
+              </div>
+              {predictionResult.confidence != null && (
+                <div className="rounded-2xl border border-border/60 bg-background/40 p-5">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Confidence</div>
+                  <div className="mt-2 text-3xl font-bold">{(predictionResult.confidence * 100).toFixed(1)}%</div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, predictionResult.confidence * 100))}%` }} /></div>
+                </div>
+              )}
+              <div className="rounded-2xl border border-border/60 bg-background/40 p-5">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Input features</div>
+                <div className="mt-2 text-3xl font-bold">{selectedFeatures.length}</div>
+                <div className="mt-1 text-xs text-muted-foreground">Processed by the saved V3 pipeline</div>
+              </div>
+            </div>
+
+            {predictionResult.probabilities && Object.keys(predictionResult.probabilities).length > 0 && (
+              <div className="rounded-2xl border border-border/60 bg-background/30 p-4">
+                <div className="mb-3 text-sm font-medium">Class probabilities</div>
+                <div className="space-y-3">
+                  {Object.entries(predictionResult.probabilities)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([label, probability]) => (
+                      <div key={label} className="grid grid-cols-[minmax(80px,1fr)_minmax(120px,3fr)_64px] items-center gap-3 text-sm">
+                        <span className="truncate font-medium">{label}</span>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${probability * 100}%` }} /></div>
+                        <span className="text-right tabular-nums text-muted-foreground">{(probability * 100).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="border-border/70 bg-card/55">
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-xl"><History className="h-5 w-5 text-primary" /> Batch history</CardTitle>
+              <CardDescription className="mt-1">Authenticated exports generated for this experiment.</CardDescription>
+            </div>
+            <Button variant="outline" className="gap-2" onClick={() => void loadPredictionHistory()} disabled={historyLoading}>
+              {historyLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {showHistory ? "Refresh" : "Load history"}
+            </Button>
+          </div>
+        </CardHeader>
+        {showHistory && (
+          <CardContent>
+            {!predictionHistory.length ? (
+              <div className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                <FileSpreadsheet className="mx-auto mb-3 h-8 w-8" /> No batch predictions yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {predictionHistory.map((item) => (
+                  <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/25 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-medium">{item.total_predictions.toLocaleString()} predictions</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</div>
+                    </div>
+                    <Button size="sm" variant="outline" className="gap-2" onClick={() => void handleDownload(item.id)}>
+                      <Download className="h-4 w-4" /> Download
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
     </div>
   );
 };

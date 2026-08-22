@@ -2,9 +2,7 @@
 # NoCodeML Platform - Git Ignore Configuration
 # ============================================
 
-# ============================================
-# Documentation and MD Files (Keep only README.md)
-# ============================================
+# Documentation: keep release-facing docs, ignore scratch documentation.
 docs/
 Backend/docs/
 Frontend/docs/
@@ -12,6 +10,7 @@ Dummy/docs/
 Frontend/docs/**
 *.md
 !README.md
+!DEPLOYMENT.md
 Backend/README.md
 Frontend/README.md
 Dummy/README.md
@@ -167,6 +166,8 @@ models/
 !tsconfig.json
 !tsconfig.*.json
 !components.json
+!vercel.json
+!Frontend/vercel.json
 
 # ============================================
 # Operating System
@@ -178,7 +179,7 @@ models/
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
-ehthumbs_vista.db
+ehthumbs.vista.db
 *.stackdump
 [Dd]esktop.ini
 $RECYCLE.BIN/

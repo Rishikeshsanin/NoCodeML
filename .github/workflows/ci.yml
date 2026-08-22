@@ -85,3 +85,56 @@ jobs:
 
       - name: Run smoke tests
         run: python -m pytest -q
+
+  backend-arm64:
+    name: ARM64 ML compatibility
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: Backend
+    env:
+      PYTHONPATH: .
+      DATABASE_URL: sqlite+aiosqlite:///./ci_nocodeml_arm64.db
+      DB_SCHEMA: nocodeml
+      CELERY_BROKER_URL: memory://
+      CELERY_RESULT_BACKEND: cache+memory://
+      SECRET_KEY: ci-only-arm64-secret-key-that-is-long-enough-123456789
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: Backend/requirements.txt
+
+      - name: Install ML stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
+      - name: Verify native ARM64 libraries
+        run: |
+          python - <<'PY'
+          import platform
+          import lightgbm
+          import numpy
+          import pandas
+          import sklearn
+          import xgboost
+
+          machine = platform.machine().lower()
+          assert machine in {'aarch64', 'arm64'}, f'Expected ARM64 runner, got {machine}'
+          print('architecture:', machine)
+          print('numpy:', numpy.__version__)
+          print('pandas:', pandas.__version__)
+          print('scikit-learn:', sklearn.__version__)
+          print('xgboost:', xgboost.__version__)
+          print('lightgbm:', lightgbm.__version__)
+          PY
+
+      - name: Run real ML compatibility tests
+        run: python -m pytest -q tests/test_ml_pipeline.py tests/test_run_config.py tests/test_eda_identity_detection.py

@@ -86,6 +86,38 @@ jobs:
       - name: Run smoke tests
         run: python -m pytest -q
 
+  backend-container:
+    name: Production container build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build backend image
+        run: docker build --pull -t nocodeml-backend:ci Backend
+
+      - name: Verify non-root runtime user
+        run: |
+          test "$(docker image inspect nocodeml-backend:ci --format '{{.Config.User}}')" = "nocodeml"
+
+      - name: Smoke-test container liveness
+        run: |
+          docker run -d --rm --name nocodeml-ci -p 8000:8000 \
+            -e DATABASE_URL=sqlite+aiosqlite:///./container_ci.db \
+            -e CELERY_BROKER_URL=memory:// \
+            -e CELERY_RESULT_BACKEND=cache+memory:// \
+            -e SECRET_KEY=container-ci-secret-key-that-is-long-enough-123456789 \
+            nocodeml-backend:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:8000/health
+          curl --fail http://127.0.0.1:8000/ready
+          docker stop nocodeml-ci
+
   backend-arm64:
     name: ARM64 ML compatibility
     runs-on: ubuntu-24.04-arm

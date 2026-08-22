@@ -1,13 +1,14 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { datasetAPI } from "@/services/apiService";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { workspaceDatasetAPI } from "@/services/workspaceService";
+
 interface DatasetRenameModalProps {
-  dataset: { id: string; name: string } | null;
+  dataset: { id: string; name: string; description?: string | null } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRenameSuccess: () => void;
@@ -17,22 +18,24 @@ const DatasetRenameModal = ({ dataset, open, onOpenChange, onRenameSuccess }: Da
   const [newName, setNewName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  useEffect(() => {
+    if (open) setNewName(dataset?.name || "");
+  }, [open, dataset]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!newName.trim() || !dataset) {
       toast.error("Please enter a valid name");
       return;
     }
-    
+
     setSubmitting(true);
     try {
-      await datasetAPI.update(dataset.id, { 
+      await workspaceDatasetAPI.update(dataset.id, {
         name: newName.trim(),
-        description: null // Keep existing description or set to null
+        description: dataset.description ?? null,
       });
-      toast.success("Dataset renamed successfully");
-      setNewName("");
+      toast.success("Dataset renamed");
       onRenameSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -47,30 +50,32 @@ const DatasetRenameModal = ({ dataset, open, onOpenChange, onRenameSuccess }: Da
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Rename Dataset</DialogTitle>
+            <DialogTitle>Rename dataset</DialogTitle>
             <DialogDescription>
-              Enter a new name for "{dataset?.name}"
+              This only changes the display name inside your temporary session.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="py-4">
-            <Label htmlFor="newName">New Name</Label>
+            <Label htmlFor="newName">Dataset name</Label>
             <Input
               id="newName"
               value={newName}
-              onChange={(e) => setNewName(e.target.value)}
+              onChange={(event) => setNewName(event.target.value)}
               placeholder={dataset?.name}
               disabled={submitting}
+              maxLength={200}
               className="mt-2"
+              autoFocus
             />
           </div>
-          
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting || !newName.trim()}>
-              {submitting ? "Renaming..." : "Rename"}
+            <Button type="submit" disabled={submitting || !newName.trim() || newName.trim() === dataset?.name}>
+              {submitting ? "Renaming…" : "Save name"}
             </Button>
           </DialogFooter>
         </form>

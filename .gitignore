@@ -2,39 +2,31 @@
 # NoCodeML Platform - Git Ignore Configuration
 # ============================================
 
-# ============================================
-# Documentation and MD Files (Keep only README.md)
-# ============================================
-# Exclude all documentation folders
+# Documentation: keep release-facing docs, ignore scratch documentation.
 docs/
 Backend/docs/
 Frontend/docs/
 Dummy/docs/
-
-# Exclude Frontend documentation folder specifically
 Frontend/docs/**
-
-# Exclude all markdown files except root README.md
 *.md
 !README.md
-# Re-exclude README.md in subdirectories
+!DEPLOYMENT.md
 Backend/README.md
 Frontend/README.md
 Dummy/README.md
 
-# Keep important files
+# Keep important project safety/docs files
+!AGENTS.md
+!SUPABASE_HUB_RULES.md
 !LICENSE
 
 # ============================================
 # Python / Backend
 # ============================================
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-
-# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -53,12 +45,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
-# PyInstaller
 *.manifest
 *.spec
-
-# Unit test / coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -71,104 +59,62 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-
-# Translations
 *.mo
 *.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
 instance/
 .webassets-cache
-
-# Scrapy stuff:
 .scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
 target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
+.ipynb_checkpoints/
 profile_default/
 ipython_config.py
-
-# pyenv
 .python-version
-
-# pipenv
 Pipfile.lock
-
-# PEP 582
 __pypackages__/
-
-# Celery stuff
 celerybeat-schedule
 celerybeat.pid
-
-# SageMath parsed files
 *.sage.py
 
-# Environments
+# Environments and secrets: ignore every real env variant.
 .env
-.venv
+.env.*
+*.env
+*.env.*
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 
-# Keep example env files
+# Explicitly keep templates only.
 !.env.example
+!.env.production.example
 !env.example
+!*.env.example
 
-# Spyder project settings
 .spyderproject
 .spyproject
-
-# Rope project settings
 .ropeproject
-
-# mkdocs documentation
 /site
-
-# mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Pyre type checker
 .pyre/
 
 # ============================================
 # Node.js / Frontend
 # ============================================
-# Dependencies
 node_modules/
 jspm_packages/
-
-# Package manager files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 pnpm-debug.log*
-
-# Build outputs
 dist/
 dist-ssr/
 *.local
-
-# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea/
@@ -178,14 +124,11 @@ dist-ssr/
 *.njsproj
 *.sln
 *.sw?
-
-# Bun
 .bun/
 
 # ============================================
 # Docker
 # ============================================
-# Docker volumes and data
 docker-data/
 postgres-data/
 redis-data/
@@ -193,24 +136,16 @@ redis-data/
 # ============================================
 # Database
 # ============================================
-# Database files
 *.db
 *.sqlite
 *.sqlite3
 
-# Alembic
-# Keep versions folder but ignore specific migration files if needed
-# alembic/versions/*.py
-
 # ============================================
 # ML Models and Data
 # ============================================
-# Uploaded datasets
 uploads/
 Backend/uploads/
 app/uploads/
-
-# Trained models
 models/
 !Backend/app/models/
 !Backend/app/models/**
@@ -221,8 +156,6 @@ models/
 *.ckpt
 *.joblib
 *.model
-
-# Large data files
 *.csv
 *.xlsx
 *.xls
@@ -233,28 +166,24 @@ models/
 !tsconfig.json
 !tsconfig.*.json
 !components.json
-!bun.lockb
+!vercel.json
+!Frontend/vercel.json
 
 # ============================================
 # Operating System
 # ============================================
-# macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
-
-# Windows
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
-ehthumbs_vista.db
+ehthumbs.vista.db
 *.stackdump
 [Dd]esktop.ini
 $RECYCLE.BIN/
 *.lnk
-
-# Linux
 *~
 .fuse_hidden*
 .directory
@@ -264,26 +193,19 @@ $RECYCLE.BIN/
 # ============================================
 # IDEs and Editors
 # ============================================
-# VSCode
 .vscode/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
-
-# JetBrains IDEs
 .idea/
 *.iml
 *.iws
 *.ipr
 out/
-
-# Sublime Text
 *.sublime-project
 *.sublime-workspace
-
-# Vim
 [._]*.s[a-v][a-z]
 [._]*.sw[a-p]
 [._]s[a-rt-v][a-z]
@@ -291,8 +213,6 @@ out/
 [._]sw[a-p]
 Session.vim
 Sessionx.vim
-
-# Emacs
 *~
 \#*\#
 /.emacs.desktop
@@ -309,8 +229,6 @@ Sessionx.vim
 *.swo
 *~.nib
 *.log
-
-# Backup and old files
 *_OLD.tsx
 *_OLD.ts
 *_OLD.jsx
@@ -325,29 +243,15 @@ Sessionx.vim
 # ============================================
 # Project Specific
 # ============================================
-# Exclude dummy folder
 Dummy/
-
-# Exclude zip files and PDFs
 *.zip
 *.pdf
-
-# Test files
 test_*.json
 *_test.json
-
-# Feature lists and phase reports
 COMPLETE_FEATURES_LIST.md
 FEATURES_LIST.md
 PHASE*.md
 DOCUMENTATION_CLEANUP_REPORT.md
 README_OLD.md
-
-# Screenshots - Allow folder but initially ignore images (add them manually)
-# You can comment out these lines after adding your screenshots
-# screenshots/*.png
-# screenshots/*.jpg
-# screenshots/*.jpeg
-# But always keep the README and .gitkeep
 !screenshots/README.md
 !screenshots/.gitkeep

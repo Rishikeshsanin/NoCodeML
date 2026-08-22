@@ -1,60 +1,69 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
-import { ExperimentProvider } from "./contexts/ExperimentContext";
-import { ModelsProvider } from "./contexts/ModelsContext";
-import { TrainingProvider } from "./contexts/TrainingContext";
-import ProtectedRoute from "./components/ProtectedRoute";
-import Header from "./components/Header";
-import Home from "./pages/Home";
-import Datasets from "./pages/Datasets";
-import Experiments from "./pages/Experiments";
-import Playground from "./pages/Playground";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import NotFound from "./pages/NotFound";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-const queryClient = new QueryClient();
+import DataScienceAssistant from "@/components/experiments/DataScienceAssistant";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import Header from "./components/Header";
+import { SessionProvider } from "./contexts/SessionContext";
+
+const Home = lazy(() => import("./pages/Home"));
+const Workspace = lazy(() => import("./pages/Workspace"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+const PageFallback = () => (
+  <div className="flex min-h-[45vh] items-center justify-center" role="status" aria-live="polite">
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+      Loading temporary workspace…
+    </div>
+  </div>
+);
+
+const WorkspaceRoute = () => (
+  <>
+    <Workspace />
+    <DataScienceAssistant />
+  </>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthProvider>
-        <ModelsProvider>
-          <ExperimentProvider>
-            <TrainingProvider>
-            <Toaster />
-            <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <div className="min-h-screen bg-background">
-                      <Header />
-                      <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/datasets" element={<Datasets />} />
-                        <Route path="/experiments" element={<Experiments />} />
-                        <Route path="/playground/:experimentId" element={<Playground />} />
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </div>
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </BrowserRouter>
-            </TrainingProvider>
-          </ExperimentProvider>
-        </ModelsProvider>
-      </AuthProvider>
+      <SessionProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <div className="min-h-screen bg-background">
+            <Header />
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/workspace" element={<WorkspaceRoute />} />
+                <Route path="/datasets" element={<Navigate to="/workspace" replace />} />
+                <Route path="/experiments" element={<Navigate to="/workspace" replace />} />
+                <Route path="/playground/:experimentId" element={<Navigate to="/workspace" replace />} />
+                <Route path="/login" element={<Navigate to="/workspace" replace />} />
+                <Route path="/register" element={<Navigate to="/workspace" replace />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </div>
+        </BrowserRouter>
+      </SessionProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

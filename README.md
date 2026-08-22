@@ -1,419 +1,373 @@
-# NoCodeML Platform 🚀
+# NoCodeML V3
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)
-![React](https://img.shields.io/badge/React-18-blue)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
+> Upload a dataset, understand it, train and compare machine-learning models, make predictions, download the outputs, and leave. No account required and no permanent visitor workspace.
 
----
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Python_3.11-009688?logo=fastapi&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-F7931E?logo=scikitlearn&logoColor=white)
+![CI](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?logo=githubactions&logoColor=white)
 
-## 📸 Preview
+## What V3 is
 
-![NoCodeML Platform Landing Page](./screenshots/landing-page.png)
-*NoCodeML Platform - Your gateway to no-code machine learning*
+NoCodeML V3 is a guest-first AutoML workspace built for a simple lifecycle:
 
----
+```text
+Open NoCodeML
+    ↓
+Upload dataset
+    ↓
+Explore + ML Readiness
+    ↓
+Choose target / task / features / models
+    ↓
+Train + compare
+    ↓
+Predict
+    ↓
+Download useful outputs
+    ↓
+Leave / clear session
+    ↓
+Temporary workspace removed
+```
 
-## 🎯 What We Built
+There is **no mandatory signup or login** in the public V3 workflow.
 
-NoCodeML is an end-to-end machine learning platform that removes the coding barrier from ML development. Users can:
-- Upload datasets (CSV, Excel, Parquet)
-- Perform automated exploratory data analysis with interactive visualizations
-- Select and configure ML models from 8 powerful algorithms
-- Train models asynchronously with real-time progress tracking
-- Make predictions on new data
-- Compare model performance across different algorithms
+Visitor datasets, generated models, training state, predictions and exports are **not written to PostgreSQL/Supabase**. They live only inside an isolated temporary session workspace on the backend.
 
-**Tech Stack:** FastAPI + React + PostgreSQL + Redis + Celery + Docker  
-**Models:** 4 Classification + 4 Regression (Logistic/Linear, Random Forest, XGBoost, LightGBM)
+## Privacy-by-lifecycle design
 
-### Why This Matters
-Machine learning shouldn't require a CS degree. NoCodeML makes ML accessible to:
-- Business analysts exploring data patterns
-- Students learning ML concepts
-- Researchers testing hypotheses quickly
-- Anyone with data and questions to answer
+Each browser session receives a cryptographically random token. The raw token is never used as a server directory name; NoCodeML stores the workspace under a SHA-256 digest of the token.
 
----
+A workspace contains only temporary folders such as:
 
-## 🚀 Quick Start
+```text
+/tmp/nocodeml-sessions/<hashed-session>/
+├── datasets/
+├── analysis/
+├── training/
+├── models/
+├── predictions/
+└── exports/
+```
 
-### Prerequisites
-- Docker & Docker Compose
-- Node.js 18+ (with npm or bun)
+Cleanup has multiple layers:
 
-### Setup (5 minutes)
+- **Clear & restart** deletes the current workspace immediately.
+- Browser close/navigation sends a best-effort cleanup signal with a short grace period so normal refreshes do not destroy work accidentally.
+- Inactive sessions expire automatically (60 minutes by default).
+- A cleanup loop removes expired/orphaned workspaces.
+- Active ML jobs hold a temporary cleanup lease so files are not deleted halfway through training.
+
+A browser cannot guarantee that a final network request is delivered when a tab or laptop disappears unexpectedly, so inactivity expiry is the hard cleanup fallback.
+
+## Guided workspace
+
+The production UI is intentionally one coherent flow instead of an account/project CRUD dashboard.
+
+### 1. Data
+
+- CSV, Excel (`.xlsx` / `.xls`) and Parquet uploads.
+- Server-side 100 MB upload limit.
+- Safe generated storage names; original filenames do not control server paths.
+- Row/column counts and metadata.
+- Dataset selection within the current temporary session.
+
+### 2. Explore
+
+- ML Readiness score.
+- Missing-value analysis.
+- Descriptive statistics.
+- Conservative ID-column detection.
+- Correlations.
+- Histogram, scatter, box, bar and correlation visualizations.
+- Chart PNG export through Plotly with readable NoCodeML filenames.
+- EDA JSON, statistics CSV, missing-values CSV and correlations CSV downloads.
+
+### 3. Configure
+
+NoCodeML provides editable guidance for:
+
+- likely target columns;
+- classification vs regression;
+- usable features;
+- train/test split;
+- suitable model defaults.
+
+Users can override those suggestions when domain knowledge says otherwise.
+
+### 4. Train & compare
+
+Eight models are supported:
+
+| Classification | Regression |
+| --- | --- |
+| Logistic Regression | Linear Regression |
+| Random Forest Classifier | Random Forest Regressor |
+| XGBoost Classifier | XGBoost Regressor |
+| LightGBM Classifier | LightGBM Regressor |
+
+The guest release uses a **bounded in-process training pool** instead of requiring Celery/Redis infrastructure. By default only one training run is active per session and global worker count is intentionally small for safe free/small deployments.
+
+Training writes status, metrics and model artifacts only into the active temporary workspace.
+
+Downloads include:
+
+- model comparison CSV;
+- training summary JSON;
+- feature importance CSV;
+- best fitted model (`.joblib`).
+
+### 5. Correct preprocessing and inference
+
+Training builds a fitted scikit-learn pipeline containing:
+
+- median imputation for numerical features;
+- optional numerical scaling;
+- most-frequent imputation for categorical features;
+- `OneHotEncoder(handle_unknown="ignore")`;
+- the estimator;
+- fitted classification label decoder where needed.
+
+Prediction reuses that exact fitted pipeline. NoCodeML does **not** create a new category encoder from prediction input.
+
+### 6. Predict & export
+
+- Single-row predictions.
+- Classification probability/confidence where available.
+- Batch CSV prediction.
+- Downloadable prediction CSVs with readable filenames.
+- Complete session ZIP export.
+
+Example names:
+
+```text
+nocodeml_customer-churn_statistics_20260822-171400.csv
+nocodeml_customer-churn_feature-importance_20260822-171400.csv
+nocodeml_customer-churn_predictions_20260822-171400.csv
+nocodeml_customer-churn_best-model_20260822-171400.joblib
+nocodeml_customer-churn_session_20260822-171400.zip
+```
+
+## Data Science Assistant
+
+The floating assistant is optional and server-side.
+
+It is authenticated by the temporary session token, not by a user account. The assistant context is deliberately built from **derived workspace information** such as dataset shape, configuration, metrics and model results. Raw uploaded dataset rows are not automatically injected into provider requests.
+
+If `GEMINI_API_KEY` is not configured, the assistant fails safely while the core ML workflow continues to work.
+
+## Architecture
+
+```text
+┌────────────────────────────────────────────────────────────┐
+│                 React + TypeScript + Vite                 │
+│  Data → Explore → Configure → Train → Predict & Export    │
+└────────────────────────────┬───────────────────────────────┘
+                             │ X-NoCodeML-Session
+                             ▼
+┌────────────────────────────────────────────────────────────┐
+│                         FastAPI                            │
+│ Session API · Workspace API · Models · Optional AI proxy  │
+└────────────────────────────┬───────────────────────────────┘
+                             │
+                             ▼
+              isolated temporary session folder
+            datasets / analysis / models / exports
+                             │
+                             ▼
+                  bounded in-process ML pool
+
+No visitor PostgreSQL database
+No visitor account store
+No Redis/Celery runtime requirement
+No persistent application volume required
+```
+
+## Technology stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 18, TypeScript, Vite, React Router |
+| UI | Tailwind CSS, shadcn/ui, Radix UI, Lucide |
+| Charts | Plotly |
+| Backend | FastAPI, Pydantic, HTTPX |
+| ML | scikit-learn, XGBoost, LightGBM |
+| Data | pandas, NumPy, PyArrow, OpenPyXL |
+| Model format | joblib |
+| Optional AI | server-side Gemini |
+| Local runtime | Docker / Docker Compose |
+| Quality | TypeScript, ESLint, pytest, GitHub Actions |
+
+## Supabase / legacy database note
+
+During the V3 revival an isolated `nocodeml` schema was created under the shared Project Hub. It remains documented and isolated, but **the guest-first V3 runtime does not use it for visitor work**.
+
+The project safety documents remain in the repository:
+
+- [`AGENTS.md`](./AGENTS.md)
+- [`SUPABASE_HUB_RULES.md`](./SUPABASE_HUB_RULES.md)
+
+Those rules still prohibit cross-project database access. The old migration/auth/persistence implementation is preserved in Git history and checkpoint branches rather than exposed by the public V3 API.
+
+## Public API surface
+
+The public release intentionally mounts only non-persistent routes:
+
+| Area | Endpoint examples |
+| --- | --- |
+| Temporary session | `POST /api/v1/session`, `POST /api/v1/session/heartbeat`, `DELETE /api/v1/session` |
+| Temporary datasets | `POST /api/v1/workspace/datasets`, preview / EDA / plot / delete routes |
+| Temporary training | `POST /api/v1/workspace/training/runs`, `GET /api/v1/workspace/training/runs/{id}` |
+| Prediction | single + batch workspace prediction routes |
+| Exports | EDA, training, prediction and complete-session downloads |
+| Models | `GET /api/v1/models` |
+| Optional AI | `POST /api/v1/assistant/chat` |
+
+Legacy `/auth`, persistent `/datasets`, `/experiments`, persistent `/training` and persistent `/predictions` routes are not mounted in the guest release.
+
+FastAPI documentation is available at `/docs` while the backend is running.
+
+## Local development
+
+### Backend
 
 ```bash
-# 1. Clone and navigate
-git clone <repo-url>
-cd V2_NoCodeML
-
-# 2. Backend - Start all services (API, PostgreSQL, Redis, Celery Worker)
+git clone https://github.com/Rishikeshsanin/NoCodeML.git
+cd NoCodeML
+git switch release/v3-revival
 cd Backend
 cp .env.example .env
-docker-compose up -d
-docker-compose exec fastapi_app alembic upgrade head
-
-# 3. Frontend - Install and run
-cd ../Frontend
-npm install  # or: bun install
-cp .env.example .env
-npm run dev  # or: bun run dev
+docker compose up --build
 ```
 
-### Access Points
-- **Application:** http://localhost:5173
-- **API Docs:** http://localhost:8000/docs
-- **Backend:** http://localhost:8000
+Backend:
 
----
-
-## ✨ Core Features
-
-### 1️⃣ Dataset Management
-- **Multi-format Support:** Upload CSV, Excel (.xlsx/.xls), and Parquet files
-- **Smart Metadata Extraction:** Automatic detection of data types, row/column counts
-- **Quick Preview:** View dataset samples directly in the browser
-- **Full CRUD Operations:** Rename, update, delete, and manage multiple datasets
-
-### 2️⃣ Exploratory Data Analysis (EDA)
-- **Automated Statistics:** Mean, median, std deviation, quartiles for all numeric columns
-- **Missing Value Analysis:** Identify and visualize data quality issues
-- **Correlation Matrix:** Interactive heatmap showing feature relationships
-- **Smart Visualizations:**
-  - Distribution plots (histograms)
-  - Box plots for outlier detection
-  - Scatter plots for bivariate analysis
-  - Powered by Plotly (backend) and Recharts (frontend)
-- **Outlier Detection:** IQR-based statistical outlier identification
-
-### 3️⃣ Experiment Workflow
-- **Project Organization:** Create experiments linked to specific datasets
-- **Version Control:** Duplicate experiments to test different configurations
-- **Configuration Persistence:** Save and load model configurations
-- **5-Step Guided Workflow:** Analysis → Config → Training → Results → Prediction
-
-### 4️⃣ Machine Learning Models (8 Algorithms)
-
-**Classification** (4 models)
-- **Logistic Regression** - Fast linear classifier for binary/multi-class problems
-- **Random Forest** - Ensemble of decision trees with feature importance
-- **XGBoost** - Gradient boosting with regularization and high accuracy
-- **LightGBM** - Ultra-fast gradient boosting optimized for speed
-
-**Regression** (4 models)
-- **Linear Regression** - Simple and interpretable linear model
-- **Random Forest** - Robust ensemble regressor with feature importance
-- **XGBoost** - High-accuracy gradient boosting for regression
-- **LightGBM** - Memory-efficient and fast gradient boosting
-
-### 5️⃣ Model Training System
-- **Asynchronous Processing:** Celery-based distributed task queue
-- **Real-time Status:** Live progress tracking with job status updates
-- **Multi-model Training:** Train multiple algorithms simultaneously
-- **Smart Hyperparameters:** Pre-configured optimal defaults for each model
-- **Comprehensive Metrics:**
-  - **Classification:** Accuracy, Precision, Recall, F1-Score, ROC-AUC
-  - **Regression:** R², MAE, MSE, RMSE
-- **Model Persistence:** Automatic saving of trained models with joblib
-- **Feature Importance:** Supported for Random Forest, XGBoost, and LightGBM models
-
-### 6️⃣ Prediction Engine
-- **Single Predictions:** Real-time predictions on individual data points
-- **Batch Processing:** Upload CSV files for bulk predictions
-- **Result Export:** Download predictions as CSV files
-- **Confidence Scores:** Probability estimates for classification tasks
-
-### 7️⃣ User Experience
-- **Authentication:** JWT-based secure user system
-- **Modern UI:** Built with shadcn/ui components and Tailwind CSS
-- **Responsive Design:** Works seamlessly on desktop and mobile
-- **Interactive Charts:** Dynamic, zoomable visualizations
-- **Real-time Feedback:** Toast notifications and progress indicators
-
----
-
-## 🏗️ Technical Architecture
-
-### Backend Stack
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| API Framework | FastAPI (Python 3.11) | High-performance async REST API |
-| Database | PostgreSQL 15 | Persistent storage for users, datasets, experiments |
-| ORM | SQLAlchemy (async) | Database abstraction layer |
-| Migrations | Alembic | Database schema version control |
-| Task Queue | Celery + Redis | Asynchronous ML model training |
-| ML Libraries | scikit-learn, XGBoost, LightGBM | 8 optimized ML algorithms |
-| Data Processing | pandas, numpy, openpyxl, pyarrow | Dataset handling and transformations |
-| Visualization | Plotly | Server-side chart generation |
-| Authentication | JWT (python-jose) | Secure user authentication |
-| Containerization | Docker + Docker Compose | Easy deployment and scaling |
-
-### Frontend Stack
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| Framework | React 18 + TypeScript | Type-safe component-based UI |
-| Build Tool | Vite | Fast development and optimized builds |
-| UI Library | shadcn/ui (Radix UI) | Accessible, customizable components |
-| Styling | Tailwind CSS | Utility-first responsive design |
-| State Management | React Context API | Global state for auth, experiments |
-| Data Fetching | TanStack Query | Caching and server state management |
-| Routing | React Router v6 | Client-side navigation |
-| Charts | Recharts | Interactive data visualizations |
-
-### System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Client Browser                         │
-│                    (React + TypeScript)                     │
-└────────────────────────┬────────────────────────────────────┘
-                         │ HTTP/REST
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Backend                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Auth API   │  │ Dataset API  │  │ Training API │     │
-│  └──────────────┘  └──────────────┘  └──────────────┘     │
-└────────┬─────────────────┬──────────────────┬──────────────┘
-         │                 │                  │
-         ▼                 ▼                  ▼
-┌─────────────────┐ ┌──────────────┐ ┌─────────────────┐
-│   PostgreSQL    │ │    Redis     │ │  Celery Worker  │
-│   (Database)    │ │ (Task Queue) │ │ (ML Training)   │
-└─────────────────┘ └──────────────┘ └─────────────────┘
+```text
+API:    http://localhost:8000
+Docs:   http://localhost:8000/docs
+Health: http://localhost:8000/health
+Ready:  http://localhost:8000/ready
 ```
 
-### Project Structure
+The V3 Compose file runs only the API and uses tmpfs for visitor workspaces. It does not start Postgres, Redis or Celery.
 
-```
-V2_NoCodeML/
-├── Backend/                  # FastAPI backend application
-│   ├── app/
-│   │   ├── api/             # API route handlers
-│   │   │   ├── auth.py      # Authentication endpoints
-│   │   │   ├── datasets.py  # Dataset management
-│   │   │   ├── eda.py       # Exploratory data analysis
-│   │   │   ├── experiments.py  # Experiment CRUD
-│   │   │   ├── models.py    # ML model catalog
-│   │   │   ├── training.py  # Model training
-│   │   │   └── predictions.py  # Prediction endpoints
-│   │   ├── core/            # Core configuration
-│   │   │   ├── config.py    # App settings
-│   │   │   ├── security.py  # Auth utilities
-│   │   │   └── model_cache.py  # Model caching
-│   │   ├── db/              # Database configuration
-│   │   ├── models/          # SQLAlchemy ORM models
-│   │   ├── schemas/         # Pydantic validation schemas
-│   │   ├── services/        # Business logic layer
-│   │   ├── worker/          # Celery tasks
-│   │   └── main.py          # Application entry point
-│   ├── alembic/             # Database migrations
-│   ├── requirements.txt     # Python dependencies
-│   ├── Dockerfile
-│   └── docker-compose.yaml
-│
-└── Frontend/                # React frontend application
-    ├── src/
-    │   ├── components/      # Reusable UI components
-    │   │   ├── datasets/    # Dataset components
-    │   │   ├── experiments/ # Experiment components
-    │   │   ├── playground/  # ML workflow components
-    │   │   └── ui/          # shadcn/ui components
-    │   ├── contexts/        # React Context providers
-    │   ├── hooks/           # Custom React hooks
-    │   ├── pages/           # Page components
-    │   ├── services/        # API services
-    │   └── types/           # TypeScript type definitions
-    ├── package.json
-    └── vite.config.ts
-```
-
----
-
-## 🛠️ Development Guide
-
-### Backend Commands
-
-```bash
-# Start all services (API, PostgreSQL, Redis, Celery)
-cd Backend
-docker-compose up -d
-
-# View logs
-docker-compose logs -f fastapi_app
-docker-compose logs -f celery_worker
-
-# Database migrations with Alembic
-docker-compose exec fastapi_app alembic upgrade head              # Apply all migrations
-docker-compose exec fastapi_app alembic revision --autogenerate -m "add_column"  # Create new migration
-docker-compose exec fastapi_app alembic downgrade -1              # Rollback last migration
-docker-compose exec fastapi_app alembic current                   # Show current revision
-docker-compose exec fastapi_app alembic history                   # Show migration history
-
-# Access container shell
-docker-compose exec fastapi_app bash
-
-# Stop all services
-docker-compose down
-```
-
-### Frontend Commands
+### Frontend
 
 ```bash
 cd Frontend
-
-# Development server (hot reload)
-npm run dev          # or: bun run dev
-
-# Production build
-npm run build        # or: bun run build
-
-# Preview production build
-npm run preview
-
-# Lint code
-npm run lint
+cp .env.example .env
+npm ci
+npm run dev
 ```
 
-### Environment Configuration
-
-**Backend** (`Backend/.env`):
-```env
-POSTGRES_USER=myuser
-POSTGRES_PASSWORD=mysecretpassword
-POSTGRES_DB=nocodeml_db
-DATABASE_URL=postgresql+psycopg://myuser:mysecretpassword@postgres:5432/nocodeml_db
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/0
-SECRET_KEY=your-secret-key-change-in-production
+```text
+http://localhost:5173
 ```
 
-**Frontend** (`Frontend/.env`):
+Frontend environment:
+
 ```env
 VITE_API_URL=http://localhost:8000
 ```
 
----
+`VITE_*` values are public browser configuration. Never put private provider credentials there.
 
-## 📡 API Reference
+Backend production environment is intentionally small:
 
-Full interactive API documentation: **http://localhost:8000/docs**
-
-### Core Endpoints
-
-| Category | Endpoint | Method | Description |
-|----------|----------|--------|-------------|
-| **Auth** | `/api/v1/auth/register` | POST | Register new user |
-| | `/api/v1/auth/login` | POST | Login and get JWT token |
-| **Datasets** | `/api/v1/datasets` | GET, POST | List/upload datasets |
-| | `/api/v1/datasets/{id}` | GET, PUT, DELETE | Manage dataset |
-| | `/api/v1/datasets/{id}/preview` | GET | Preview dataset rows |
-| **Experiments** | `/api/v1/experiments` | GET, POST | List/create experiments |
-| | `/api/v1/experiments/{id}` | GET, PUT, DELETE | Manage experiment |
-| | `/api/v1/experiments/{id}/duplicate` | POST | Duplicate experiment |
-| **EDA** | `/api/v1/eda/{dataset_id}/summary` | GET | Get statistics & correlations |
-| | `/api/v1/eda/plot` | POST | Generate visualization |
-| **Models** | `/api/v1/models` | GET | List all 8 ML models |
-| | `/api/v1/models/{task_type}` | GET | Filter by classification/regression |
-| **Training** | `/api/v1/training/start` | POST | Start async training jobs |
-| | `/api/v1/training/runs/{job_id}` | GET | Get training status & results |
-| **Predictions** | `/api/v1/predictions/batch` | POST | Batch predictions from CSV |
-| | `/api/v1/predictions/{batch_id}` | GET | Get prediction results |
-
----
-
-## 🗄️ Database Schema & Migrations
-
-### Alembic Migrations
-
-The project uses **Alembic** for database schema version control, ensuring smooth schema evolution across environments.
-
-#### Current Migrations
-
-1. **`001_create_datasets_table.py`** - User datasets table
-   - Stores uploaded dataset metadata (name, file path, rows, columns)
-   - User-scoped with foreign key to users table
-
-2. **`002_create_experiments_table.py`** - ML experiments table
-   - Links experiments to datasets
-   - Stores experiment configuration (features, target, task type)
-
-3. **`003_create_training_tables.py`** - Training infrastructure
-   - Training jobs table (status, model type, hyperparameters)
-   - Training results table (metrics, feature importance)
-
-4. **`004_create_training_runs_table.py`** - Enhanced training tracking
-   - Detailed job execution tracking
-   - Training logs and progress monitoring
-
-5. **`005_create_prediction_batches_table.py`** - Prediction system
-   - Batch prediction management
-   - Prediction results storage
-
-#### Migration Commands
-
-```bash
-# Initialize database (first time setup)
-docker-compose exec fastapi_app alembic upgrade head
-
-# Create new migration after model changes
-docker-compose exec fastapi_app alembic revision --autogenerate -m "add_new_column"
-
-# Apply migrations
-docker-compose exec fastapi_app alembic upgrade head
-
-# Rollback last migration
-docker-compose exec fastapi_app alembic downgrade -1
-
-# View current database version
-docker-compose exec fastapi_app alembic current
-
-# View migration history
-docker-compose exec fastapi_app alembic history --verbose
+```env
+ENVIRONMENT=production
+SESSION_ROOT_DIR=/tmp/nocodeml-sessions
+SESSION_TTL_MINUTES=60
+SESSION_CLEANUP_INTERVAL_SECONDS=300
+SESSION_CLOSE_GRACE_SECONDS=30
+WORKSPACE_TRAINING_WORKERS=1
+WORKSPACE_MAX_MODELS_PER_RUN=8
+BACKEND_CORS_ORIGINS=https://your-frontend.example
+GEMINI_API_KEY=optional-server-side-key
+GEMINI_MODEL=gemini-3.7-flash
 ```
 
-### Database Tables
+No `DATABASE_URL`, PostgreSQL, Supabase, Redis or Celery service is required for the public guest workflow.
 
-| Table | Purpose | Key Columns |
-|-------|---------|-------------|
-| `users` | User authentication | email, hashed_password, created_at |
-| `datasets` | Uploaded datasets | name, file_path, num_rows, num_columns, user_id |
-| `experiments` | ML experiments | name, dataset_id, config (JSONB), user_id |
-| `training_jobs` | Training tasks | status, model_type, experiment_id |
-| `training_results` | Model metrics | accuracy, precision, f1_score, job_id |
-| `training_runs` | Run tracking | start_time, end_time, error_message |
-| `training_logs` | Progress logs | message, metrics_json, timestamp |
-| `prediction_batches` | Predictions | input_file_path, output_file_path, status |
+## Automated validation
 
----
+GitHub Actions validates:
 
-## 🎓 Technical Highlights
+### Frontend
 
-### What We Built
-- **Full ML Pipeline:** Complete workflow from data upload to predictions
-- **8 Production-Ready Models:** 4 classification + 4 regression algorithms (Logistic/Linear Regression, Random Forest, XGBoost, LightGBM)
-- **Async Training:** Celery + Redis for non-blocking model training
-- **Type-Safe Frontend:** Full TypeScript coverage with proper interfaces
-- **Interactive Viz:** Server-side Plotly, client-side Recharts for data exploration
-- **Microservices Architecture:** Separate containers for API, worker, database, cache
+```text
+npm ci
+TypeScript typecheck
+Vite production build
+ESLint
+critical npm vulnerability audit
+```
 
-### Challenges Overcome
-1. **Long-running Tasks:** Implemented Celery task queue to handle training jobs that can take minutes
-2. **State Synchronization:** Real-time status updates between training worker and UI via polling
-3. **Type Safety:** Consistent TypeScript types across 50+ React components
-4. **Data Validation:** Robust Pydantic schemas preventing bad data from reaching ML pipeline
-5. **Model Persistence:** Efficient joblib serialization and retrieval of trained models
+### Backend
 
-### Key Architecture Decisions
-| Decision | Rationale |
-|----------|-----------|
-| FastAPI over Flask | Native async support, automatic OpenAPI docs, better performance |
-| Celery for training | Prevents API timeouts on long-running ML tasks |
-| React Context API | Simpler than Redux for our scope; sufficient for auth/experiment state |
-| Docker Compose | Single-command dev environment with all services |
-| PostgreSQL | ACID compliance for experiment/training data |
-| shadcn/ui | Accessible components, full customization control |
+```text
+Python compile
+full pytest suite
+guest-session isolation and cleanup
+real classification workflow
+real regression workflow
+single/batch prediction
+export/download behavior
+production Docker image
+non-root container runtime
+/health + /ready + temporary-session container smoke test
+ARM64 ML compatibility
+```
 
----
+The real ML tests cover mixed numerical/categorical data, persisted preprocessing, unseen categories, classification and regression.
+
+## Error and resource guardrails
+
+The application includes controlled handling for malformed/empty uploads, unsupported file types, oversized files, invalid targets/features, model failures, prediction schema mismatches, expired sessions and unavailable AI.
+
+Resource defaults are intentionally conservative for public college-project hosting:
+
+- upload size: **100 MB**;
+- idle session: **60 minutes**;
+- active training runs per session: **1**;
+- global training pool: **bounded**;
+- models per run: **up to 8**.
+
+## Repository branches
+
+| Branch | Purpose |
+| --- | --- |
+| `main` | Original V2 until the V3 release is merged |
+| `legacy/v2-2026-08-22` | Permanent V2 recovery point |
+| `checkpoint/v3-rc-persistent-2026-08-22` | Working persistence-based V3 RC before guest refactor |
+| `release/v3-revival` | Guest-first V3 release candidate |
+
+## Release checklist
+
+- [x] Preserve V2 and the persistence-based V3 checkpoint
+- [x] Repair ML preprocessing/inference correctness
+- [x] ML Readiness + Smart target/task/model guidance
+- [x] Anonymous temporary sessions
+- [x] Session isolation and automatic cleanup
+- [x] Database-free dataset + EDA workflow
+- [x] Database-free classification/regression training
+- [x] Temporary single + batch prediction
+- [x] Download/export engine and readable filenames
+- [x] Guest-first routing with no signup wall
+- [x] Guest-session AI assistant
+- [x] Remove persistent routes from the public API
+- [x] Remove Postgres/Redis/Celery from the public runtime architecture
+- [ ] Green final CI on the release head
+- [ ] Production backend deployment
+- [ ] Vercel frontend deployment
+- [ ] Live classification + regression E2E QA
+- [ ] Merge to `main`
+- [ ] Tag `v3.0.0`
+
+## Project philosophy
+
+**Quality > quantity.**
+
+NoCodeML is intentionally a coherent ML utility rather than a collection of unrelated AI features. The product should make the workflow easier without hiding what target, features, model, split and metrics were actually used.

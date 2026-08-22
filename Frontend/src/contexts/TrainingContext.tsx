@@ -1,8 +1,25 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+
 import { useToast } from '@/hooks/use-toast';
 import apiService from '@/services/apiService';
 
-// Run-based architecture types
+interface TrainingProgress {
+  percent: number;
+  message: string;
+}
+
+interface TrainingResultsSummary {
+  total_models: number;
+  successful: number;
+  failed: number;
+  best_model?: {
+    model_type: string;
+    display_name: string;
+    metric: string;
+    value: number;
+  };
+}
+
 interface TrainingRun {
   id: string;
   run_number: number;
@@ -10,30 +27,29 @@ interface TrainingRun {
   started_at?: string;
   completed_at?: string;
   duration_seconds?: number;
-  progress?: {
-    percent: number;
-    message: string;
-  };
-  results_summary?: {
-    total_models: number;
-    successful: number;
-    failed: number;
-    best_model?: {
-      model_type: string;
-      display_name: string;
-      metric: string;
-      value: number;
-    };
-  };
+  progress?: TrainingProgress;
+  results_summary?: TrainingResultsSummary;
   error_message?: string;
   created_at: string;
+}
+
+interface StartRunResponse {
+  run_id: string;
+  run_number: number;
+  created_at: string;
+}
+
+interface RunStatusResponse {
+  status: TrainingRun['status'];
+  progress?: TrainingProgress;
+  results_summary?: TrainingResultsSummary;
+  error_message?: string;
 }
 
 interface TrainingContextType {
   currentRun: TrainingRun | null;
   isTraining: boolean;
   error: string | null;
-  
   startTraining: (experimentId: string) => Promise<void>;
   stopPolling: () => void;
   clearTraining: () => void;
@@ -49,129 +65,135 @@ export const useTraining = () => {
   return context;
 };
 
+const errorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
+
 export const TrainingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRun, setCurrentRun] = useState<TrainingRun | null>(null);
   const [isTraining, setIsTraining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
-  
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const { toast } = useToast();
 
-  // Cleanup polling on unmount
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setIsTraining(false);
+  };
+
   useEffect(() => {
     return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        setPollingInterval(null);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
     };
-  }, []); // Empty deps - only run on unmount
+  }, []);
 
   const startTraining = async (experimentId: string) => {
-    // Prevent multiple simultaneous training runs
     if (isTraining) {
       toast({
-        title: "Training in Progress",
-        description: "Please wait for current training to complete",
-        variant: "destructive"
+        title: 'Training in progress',
+        description: 'Please wait for the current training run to complete.',
+        variant: 'destructive',
       });
       return;
     }
 
+    stopPolling();
+    setError(null);
+    setIsTraining(true);
+
     try {
-      setError(null);
-      setIsTraining(true);
-      
-      // Start training run
-      const response = await apiService.training.startRun(experimentId);
-      
+      const response = (await apiService.training.startRun(experimentId)) as StartRunResponse;
+
       setCurrentRun({
         id: response.run_id,
         run_number: response.run_number,
         status: 'pending',
-        created_at: response.created_at
+        created_at: response.created_at,
       });
-      
+
       toast({
-        title: "Training Started",
-        description: `Run #${response.run_number} has been queued`,
+        title: 'Training started',
+        description: `Run #${response.run_number} has been queued.`,
       });
-      
-      // Start polling with retry limit
-      let retryCount = 0;
-      const maxRetries = 100; // 5 minutes max (100 * 3 seconds)
-      
+
+      let pollCount = 0;
+      let consecutiveErrors = 0;
+      const maxPolls = 1200; // Up to one hour at a 3 second cadence.
+      const maxConsecutiveErrors = 8;
+
       const interval = setInterval(async () => {
-        // Check retry limit
-        if (retryCount++ > maxRetries) {
-          clearInterval(interval);
-          setPollingInterval(null);
-          setIsTraining(false);
-          setError('Polling timeout - please refresh to check status');
-          toast({
-            title: "Polling Timeout",
-            description: "Training may still be running. Please refresh to check status.",
-            variant: "destructive"
-          });
+        pollCount += 1;
+
+        if (pollCount > maxPolls) {
+          stopPolling();
+          setError('Training is taking longer than expected. Refresh later to check the run status.');
           return;
         }
 
         try {
-          const status = await apiService.training.getRunStatus(response.run_id);
-          
-          setCurrentRun(prev => prev ? { 
-            ...prev, 
-            status: status.status,
-            progress: status.progress,
-            error_message: status.error_message,
-            results_summary: status.results_summary 
-          } : null);
-          
-          // Terminal states - stop polling
-          if (status.status === 'completed' || status.status === 'failed') {
-            clearInterval(interval);
-            setPollingInterval(null);
-            setIsTraining(false);
-            
+          const status = (await apiService.training.getRunStatus(response.run_id)) as RunStatusResponse;
+          consecutiveErrors = 0;
+
+          setCurrentRun((previous) =>
+            previous
+              ? {
+                  ...previous,
+                  status: status.status,
+                  progress: status.progress,
+                  error_message: status.error_message,
+                  results_summary: status.results_summary,
+                }
+              : null,
+          );
+
+          if (['completed', 'failed', 'cancelled'].includes(status.status)) {
+            stopPolling();
+
             if (status.status === 'completed') {
               toast({
-                title: "Training Complete",
-                description: `Run #${response.run_number} finished successfully`,
+                title: 'Training complete',
+                description: `Run #${response.run_number} finished successfully.`,
               });
             } else {
-              setError(status.error_message || 'Training failed');
+              const detail = status.error_message || (status.status === 'cancelled' ? 'Training was cancelled.' : 'Training failed.');
+              setError(detail);
               toast({
-                title: "Training Failed",
-                description: status.error_message || 'Unknown error',
-                variant: "destructive",
+                title: status.status === 'cancelled' ? 'Training cancelled' : 'Training failed',
+                description: detail,
+                variant: 'destructive',
               });
             }
           }
-        } catch (err) {
-          console.error('Polling error:', err);
-          // Don't stop polling on transient errors
+        } catch (pollError: unknown) {
+          consecutiveErrors += 1;
+          console.warn('Training status poll failed', pollError);
+
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            stopPolling();
+            setError('Lost contact with the training service. Refresh to check whether the run is still active.');
+          }
         }
       }, 3000);
-      
-      setPollingInterval(interval);
-      
-    } catch (err: any) {
-      setIsTraining(false);
-      setError(err.response?.data?.detail || 'Failed to start training');
+
+      pollingIntervalRef.current = interval;
+    } catch (startError: unknown) {
+      stopPolling();
+      const detail = errorMessage(startError, 'Failed to start training.');
+      setError(detail);
       toast({
-        title: "Training Failed",
-        description: err.response?.data?.detail || 'Failed to start training',
-        variant: "destructive",
+        title: 'Training failed to start',
+        description: detail,
+        variant: 'destructive',
       });
     }
-  };
-
-  const stopPolling = () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
-    }
-    setIsTraining(false);
   };
 
   const clearTraining = () => {
@@ -180,17 +202,17 @@ export const TrainingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setError(null);
   };
 
-  const value: TrainingContextType = {
-    currentRun,
-    isTraining,
-    error,
-    startTraining,
-    stopPolling,
-    clearTraining,
-  };
-
   return (
-    <TrainingContext.Provider value={value}>
+    <TrainingContext.Provider
+      value={{
+        currentRun,
+        isTraining,
+        error,
+        startTraining,
+        stopPolling,
+        clearTraining,
+      }}
+    >
       {children}
     </TrainingContext.Provider>
   );

@@ -1,131 +1,105 @@
 import { Link } from "react-router-dom";
-import { Upload, BarChart3, Zap, Download, Brain, TrendingUp, Sparkles, MessageSquare } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  BrainCircuit,
+  Download,
+  ShieldCheck,
+  Sparkles,
+  Upload,
+  WandSparkles,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 const Home = () => {
-  const features = [
-    {
-      icon: Upload,
-      title: "Data Upload & Management",
-      description: "Drag and drop CSV files up to 100MB. Automatic validation and preprocessing suggestions.",
-      gradient: "from-primary to-primary-blue"
-    },
-    {
-      icon: BarChart3,
-      title: "Interactive Visualizations",
-      description: "Build custom plots with Plotly. Correlation matrices, distributions, and more.",
-      gradient: "from-primary-purple to-accent"
-    },
-    {
-      icon: Brain,
-      title: "Automated Model Training",
-      description: "Train multiple models simultaneously. Compare performance metrics in real-time.",
-      gradient: "from-primary-blue to-info"
-    },
-    {
-      icon: Sparkles,
-      title: "Smart Hyperparameter Tuning",
-      description: "Automatic hyperparameter optimization for best model performance without manual configuration.",
-      gradient: "from-accent to-primary-blue"
-    },
-    {
-      icon: MessageSquare,
-      title: "AI Assistant Chatbot",
-      description: "Get instant help and insights with our integrated AI assistant for data analysis and ML guidance.",
-      gradient: "from-primary-purple to-primary"
-    },
-    {
-      icon: TrendingUp,
-      title: "Real-time Results",
-      description: "Live training monitoring with detailed evaluation metrics and model comparison.",
-      gradient: "from-primary to-primary-purple"
-    },
-    {
-      icon: Zap,
-      title: "Fast & Intuitive",
-      description: "Streamlined workflow from data upload to predictions in minutes, not hours.",
-      gradient: "from-accent to-primary-purple"
-    }
+  const workflow = [
+    ["Upload", "Bring a CSV, Excel or Parquet dataset."],
+    ["Explore", "Inspect quality, missing values, distributions and correlations."],
+    ["Configure", "Pick a target or use NoCodeML's task and model suggestions."],
+    ["Train", "Compare real classification or regression models."],
+    ["Predict", "Run single or batch predictions with the fitted pipeline."],
+    ["Export", "Download charts, metrics, predictions, models or the complete session."],
   ];
-  
+
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 md:py-32">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary-purple/10 to-primary-blue/10 animate-pulse-glow"></div>
-        <div className="container relative mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center space-y-8 animate-fade-in">
-            <h1 className="text-5xl md:text-7xl font-bold gradient-text leading-tight">
-              Machine Learning Without Code
+    <main className="relative isolate overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_15%,hsl(var(--primary)/0.11),transparent_30%),radial-gradient(circle_at_85%_10%,hsl(var(--primary-purple)/0.12),transparent_28%),radial-gradient(circle_at_55%_72%,hsl(var(--primary-blue)/0.08),transparent_35%)]" />
+
+      <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:px-8 lg:py-24">
+        <div className="space-y-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary shadow-[0_0_30px_hsl(var(--primary)/0.08)]">
+            <ShieldCheck className="h-3.5 w-3.5" /> No signup. No permanent workspace.
+          </div>
+
+          <div className="space-y-5">
+            <h1 className="max-w-4xl text-4xl font-black tracking-[-0.04em] sm:text-5xl md:text-6xl lg:text-7xl">
+              Machine learning from your data, <span className="gradient-text">without the setup.</span>
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
-              Upload your data, visualize patterns, train models with automated hyperparameter tuning, and get AI-powered insights - all through an intuitive interface
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-              <Link to="/experiments">
-                <Button size="lg" className="gradient-primary text-background font-semibold hover:opacity-90 transition-opacity px-8 py-6 text-lg">
-                  Get Started
-                </Button>
-              </Link>
-              <Link to="/experiments">
-                <Button size="lg" variant="outline" className="border-primary text-primary hover:bg-primary/10 px-8 py-6 text-lg">
-                  View Demo
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Features Grid */}
-      <section className="py-20 bg-card/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16 animate-slide-up">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Everything You Need for <span className="gradient-text">ML Experiments</span>
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From data exploration to automated model optimization with AI assistance, all in one platform
+            <p className="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+              NoCodeML is a temporary, guided AutoML workspace. Upload a dataset, understand it, train and compare models, make predictions and download the results. When the session ends, the workspace is removed.
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
-            {features.map((feature, index) => (
-              <div
-                key={index}
-                className="card-hover bg-card border border-border rounded-xl p-6 space-y-4"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${feature.gradient} flex items-center justify-center`}>
-                  <feature.icon className="w-6 h-6 text-background" />
-                </div>
-                <h3 className="text-xl font-semibold">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-12 rounded-xl px-6 font-semibold shadow-[0_0_30px_hsl(var(--primary)/0.18)]">
+              <Link to="/workspace">Start analyzing <ArrowRight className="ml-2 h-4 w-4" /></Link>
+            </Button>
+            <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground sm:px-3"><Sparkles className="h-4 w-4 text-primary" /> Guest-first by design</div>
+          </div>
+
+          <div className="grid max-w-2xl grid-cols-3 gap-3 pt-2">
+            {[["8", "ML models"], ["0", "accounts required"], ["1", "guided workspace"]].map(([value, label]) => (
+              <div key={label} className="rounded-2xl border border-border/60 bg-card/35 p-3 backdrop-blur-xl sm:p-4">
+                <div className="text-2xl font-bold text-foreground sm:text-3xl">{value}</div>
+                <div className="mt-1 text-[11px] leading-4 text-muted-foreground sm:text-xs">{label}</div>
               </div>
             ))}
           </div>
         </div>
-      </section>
-      
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto bg-gradient-to-br from-primary/20 via-primary-purple/20 to-primary-blue/20 rounded-2xl border border-primary/30 p-12 text-center space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Ready to Build Your First Model?
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Start experimenting with machine learning in minutes. Powered by automated hyperparameter tuning and AI assistance. No coding required.
-            </p>
-            <Link to="/experiments">
-              <Button size="lg" className="gradient-primary text-background font-semibold hover:opacity-90 transition-opacity px-8 py-6 text-lg">
-                Launch Playground
-              </Button>
-            </Link>
+
+        <div className="relative mx-auto w-full max-w-xl">
+          <div className="absolute -inset-8 -z-10 rounded-full bg-primary/10 blur-3xl" />
+          <div className="overflow-hidden rounded-[2rem] border border-border/70 bg-card/55 p-4 shadow-2xl backdrop-blur-2xl sm:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div><p className="text-xs font-medium uppercase tracking-[0.22em] text-primary">One clean flow</p><h2 className="mt-1 text-xl font-semibold sm:text-2xl">From file to useful output</h2></div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10"><BrainCircuit className="h-5 w-5 text-primary" /></div>
+            </div>
+            <div className="space-y-2.5">
+              {workflow.map(([step, detail], index) => (
+                <div key={step} className="group flex items-center gap-3 rounded-2xl border border-border/55 bg-background/45 p-3.5 transition-all hover:border-primary/30 hover:bg-primary/[0.04]">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-secondary text-xs font-bold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">{String(index + 1).padStart(2, "0")}</div>
+                  <div className="min-w-0 flex-1"><div className="font-medium">{step}</div><div className="text-xs text-muted-foreground">{detail}</div></div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
-    </div>
+
+      <section className="border-y border-border/55 bg-card/20">
+        <div className="mx-auto grid max-w-7xl gap-4 px-4 py-16 sm:px-6 md:grid-cols-2 lg:grid-cols-4 lg:px-8 lg:py-20">
+          {[
+            [Upload, "Temporary uploads", "Files live only inside the active temporary workspace."],
+            [BarChart3, "EDA before training", "Understand data quality and relationships before choosing a model."],
+            [WandSparkles, "Smart configuration", "Get task, target, feature and model guidance while keeping control."],
+            [Download, "Export your work", "Download analysis, metrics, models, predictions and a full session bundle."],
+          ].map(([Icon, title, description]) => {
+            const FeatureIcon = Icon as typeof Upload;
+            return <article key={String(title)} className="rounded-3xl border border-border/60 bg-background/40 p-5 backdrop-blur-xl sm:p-6"><div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10"><FeatureIcon className="h-5 w-5 text-primary" /></div><h3 className="text-lg font-semibold">{String(title)}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{String(description)}</p></article>;
+          })}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+        <div className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card/70 to-primary-purple/[0.08] p-6 sm:p-10 lg:p-12">
+          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Bring the dataset. Leave with the results.</h2><p className="mt-4 leading-7 text-muted-foreground">No account lifecycle, no saved-project clutter and no permanent visitor database. Download what you need before the temporary session ends.</p></div>
+            <Button asChild size="lg" className="h-12 shrink-0 rounded-xl px-6"><Link to="/workspace">Open NoCodeML <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 };
 

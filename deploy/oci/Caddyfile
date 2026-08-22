@@ -1,0 +1,14 @@
+{$NOCODEML_HOST} {
+    encode zstd gzip
+
+    @health path /health /ready
+    header @health Cache-Control "no-store"
+
+    reverse_proxy api:8000
+
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}

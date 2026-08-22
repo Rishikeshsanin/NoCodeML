@@ -21,6 +21,13 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // V2 contains broad API payloads typed as `any`. Keep them visible during the
+      // V3 migration without letting stylistic legacy debt mask build/runtime regressions.
+      "@typescript-eslint/no-explicit-any": "warn",
+      // Some generated shadcn primitives use empty extension interfaces.
+      "@typescript-eslint/no-empty-object-type": "warn",
+      // V2 has two harmless mutable declarations that are being cleaned during the type pass.
+      "prefer-const": "warn",
     },
   },
 );

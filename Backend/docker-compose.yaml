@@ -1,83 +1,23 @@
+name: nocodeml
+
 services:
-  fastapi_app:
+  api:
     build: .
-    container_name: fastapi_app
     working_dir: /app
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app:ro  # Read-only for safety
-      - dataset_storage:/app/datasets
-      - models_storage:/app/models  # Persistent storage for trained models
-      - predictions_storage:/app/predictions  # Persistent storage for prediction results
-    env_file:
-      - .env
-    environment:
-      - PYTHONPATH=/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-
-  celery_worker:
-    build: .
-    container_name: celery_worker
-    working_dir: /app
-    volumes:
       - ./app:/app/app:ro
-      - dataset_storage:/app/datasets
-      - models_storage:/app/models  # Celery worker needs write access to save models
-      - predictions_storage:/app/predictions  # Storage for prediction results
+    tmpfs:
+      - /tmp/nocodeml-sessions:mode=0700,uid=10001,gid=10001
+      - /tmp/nocodeml-legacy:mode=0700,uid=10001,gid=10001
+      - /tmp/nocodeml-artifacts:mode=0700,uid=10001,gid=10001
     env_file:
       - .env
     environment:
-      - PYTHONPATH=/app
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      PYTHONPATH: /app
+      SESSION_ROOT_DIR: /tmp/nocodeml-sessions
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  postgres:
-    image: postgres:17-alpine  # Use alpine for smaller image
-    container_name: postgres_db
-    env_file:
-      - .env
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: redis_broker
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-  
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    restart: unless-stopped
-    network_mode: "service:fastapi_app"
-    depends_on:
-      - fastapi_app
-    profiles:
-      - tunnel
-
-volumes:
-  postgres_data:
-  dataset_storage:
-  models_storage:  # Persistent storage for trained ML models
-  predictions_storage:  # Persistent storage for prediction results
+# No Postgres, Redis, Celery worker or persistent application volume is part of
+# the V3 guest runtime. All visitor workspaces are short-lived filesystem data.

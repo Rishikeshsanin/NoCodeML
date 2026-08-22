@@ -1,5 +1,3 @@
-// Frontend/src/types/experiment.ts
-
 export interface FeatureTypes {
   numerical: string[];
   categorical: string[];
@@ -8,9 +6,9 @@ export interface FeatureTypes {
 export interface ModelConfig {
   model_type: string;
   display_name: string;
-  preset: "fast" | "balanced" | "accurate";
-  hyperparameters: Record<string, any>;
-  custom_hyperparameters?: Record<string, any> | null;
+  preset: "fast" | "default";
+  hyperparameters: Record<string, unknown>;
+  custom_hyperparameters?: Record<string, unknown> | null;
 }
 
 export interface ExperimentConfig {
@@ -23,16 +21,16 @@ export interface ExperimentConfig {
   randomSeed?: number;
   models?: ModelConfig[];
   enableOptimization?: boolean;
-  
-  // Deprecated fields (backward compatibility)
+
+  // Deprecated V2 compatibility fields. New V3 code should not write these.
   features?: string[];
   selectedModels?: string[];
 }
 
 export interface AppliedRule {
   parameter: string;
-  original_value: any;
-  value: any;
+  original_value: unknown;
+  value: unknown;
   reason: string;
 }
 
@@ -52,7 +50,7 @@ export interface HyperparameterTuning {
   test_score: number;
   applied_rules: AppliedRule[];
   dataset_info: DatasetInfo;
-  best_params: Record<string, any>;
+  best_params: Record<string, unknown>;
 }
 
 export interface ExperimentResponse {
@@ -62,7 +60,7 @@ export interface ExperimentResponse {
   datasetName?: string;
   status: "in_progress" | "completed";
   config: ExperimentConfig;
-  results?: Record<string, any>;
+  results?: Record<string, unknown>;
   createdAt: string;
   updatedAt?: string;
 }
@@ -74,7 +72,18 @@ export interface ColumnInfo {
   missing_percent: number;
   unique_count: number;
   is_id_column: boolean;
-  sample_values?: any[];
+  sample_values?: unknown[];
+}
+
+export interface NumericColumnStatistics {
+  count: number;
+  mean: number;
+  std: number;
+  min: number;
+  "25%": number;
+  "50%": number;
+  "75%": number;
+  max: number;
 }
 
 export interface EDAResponse {
@@ -91,7 +100,7 @@ export interface EDAResponse {
   numeric_columns: string[];
   categorical_columns: string[];
   id_columns: string[];
-  statistics: Record<string, any>;
+  statistics: Record<string, NumericColumnStatistics>;
   correlations: {
     columns: string[];
     matrix: number[][];
@@ -113,7 +122,7 @@ export interface EDAResponse {
   };
   preview_data: {
     columns: string[];
-    rows: Array<Record<string, any>>;
+    rows: Array<Record<string, unknown>>;
     total_rows: number;
     page_size: number;
   };

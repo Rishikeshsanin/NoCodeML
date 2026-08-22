@@ -1,12 +1,13 @@
 """API routes package."""
 from fastapi import APIRouter
 
-from app.api import assistant, auth, datasets, eda, experiments, models, predictions, session, training
+from app.api import assistant, auth, datasets, eda, experiments, models, predictions, session, training, workspace
 
 
 api_router = APIRouter()
 
 api_router.include_router(session.router, prefix="/session", tags=["Temporary Session"])
+api_router.include_router(workspace.router, prefix="/workspace", tags=["Temporary Workspace"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(datasets.router, prefix="/datasets", tags=["Datasets"])
 api_router.include_router(experiments.router, prefix="/experiments", tags=["Experiments"])

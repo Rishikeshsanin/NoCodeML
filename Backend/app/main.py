@@ -36,6 +36,11 @@ async def lifespan(app: FastAPI):
 
     initialize_model_cache()
     session_manager.ensure_root()
+    # In-process ML jobs cannot survive an API restart. Clear any leases left by
+    # the previous process before applying normal close/TTL cleanup.
+    reset_leases = await asyncio.to_thread(session_manager.reset_stale_job_leases)
+    if reset_leases:
+        print(f"Recovered {reset_leases} interrupted temporary training session(s)")
     await asyncio.to_thread(session_manager.cleanup_expired)
     cleanup_task = asyncio.create_task(_session_cleanup_loop(), name="nocodeml-session-cleanup")
 

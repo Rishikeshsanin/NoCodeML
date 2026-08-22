@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from pydantic import BaseModel, Field
 
 from app.api.session import SessionToken
+from app.schemas.eda import EDAResponse, PlotRequest, PlotResponse
 from app.services.workspace_dataset_service import (
     create_workspace_dataset,
     delete_workspace_dataset,
@@ -14,6 +15,10 @@ from app.services.workspace_dataset_service import (
     list_workspace_datasets,
     preview_workspace_dataset,
     update_workspace_dataset,
+)
+from app.services.workspace_eda_service import (
+    generate_workspace_plot_data,
+    get_workspace_eda_summary,
 )
 
 
@@ -66,6 +71,23 @@ def preview_dataset(
     rows: Annotated[int, Query(ge=1, le=50)] = 10,
 ):
     return preview_workspace_dataset(token, dataset_id, rows)
+
+
+@router.get("/datasets/{dataset_id}/eda", response_model=EDAResponse)
+async def dataset_eda(dataset_id: str, token: SessionToken):
+    return await get_workspace_eda_summary(token, dataset_id)
+
+
+@router.post("/datasets/{dataset_id}/plot", response_model=PlotResponse)
+async def dataset_plot(dataset_id: str, request: PlotRequest, token: SessionToken):
+    return await generate_workspace_plot_data(
+        token=token,
+        dataset_id=dataset_id,
+        plot_type=request.plot_type,
+        x_column=request.x_column,
+        y_column=request.y_column,
+        group_by=request.group_by,
+    )
 
 
 @router.delete("/datasets/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)

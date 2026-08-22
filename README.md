@@ -209,7 +209,7 @@ The project safety documents remain in the repository:
 - [`AGENTS.md`](./AGENTS.md)
 - [`SUPABASE_HUB_RULES.md`](./SUPABASE_HUB_RULES.md)
 
-Those rules still prohibit cross-project database access. The old migration/auth/persistence implementation is preserved in Git history and checkpoint branches rather than exposed by the public V3 API.
+Those rules still prohibit cross-project database access. Legacy persistence code is not mounted by the public V3 API; recovery branches preserve the earlier architectures.
 
 ## Public API surface
 
@@ -235,9 +235,7 @@ FastAPI documentation is available at `/docs` while the backend is running.
 
 ```bash
 git clone https://github.com/Rishikeshsanin/NoCodeML.git
-cd NoCodeML
-git switch release/v3-revival
-cd Backend
+cd NoCodeML/Backend
 cp .env.example .env
 docker compose up --build
 ```
@@ -274,6 +272,12 @@ VITE_API_URL=http://localhost:8000
 
 `VITE_*` values are public browser configuration. Never put private provider credentials there.
 
+## Deployment
+
+The versioned zero-cost production path uses **Vercel Hobby for the React frontend** and an **Oracle Cloud Always Free Ampere A1 VM for the FastAPI/ML backend**, with Caddy HTTPS and tmpfs visitor workspaces.
+
+See [`DEPLOYMENT.md`](./DEPLOYMENT.md) for the exact production steps, networking rules, Vercel environment, CORS tightening, live E2E checklist and rollback instructions.
+
 Backend production environment is intentionally small:
 
 ```env
@@ -305,7 +309,7 @@ ESLint
 critical npm vulnerability audit
 ```
 
-### Backend
+### Backend and deployment
 
 ```text
 Python compile
@@ -319,6 +323,8 @@ production Docker image
 non-root container runtime
 /health + /ready + temporary-session container smoke test
 ARM64 ML compatibility
+Oracle Compose validation
+Vercel config validation
 ```
 
 The real ML tests cover mixed numerical/categorical data, persisted preprocessing, unseen categories, classification and regression.
@@ -339,10 +345,10 @@ Resource defaults are intentionally conservative for public college-project host
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Original V2 until the V3 release is merged |
+| `main` | NoCodeML V3 production source |
 | `legacy/v2-2026-08-22` | Permanent V2 recovery point |
-| `checkpoint/v3-rc-persistent-2026-08-22` | Working persistence-based V3 RC before guest refactor |
-| `release/v3-revival` | Guest-first V3 release candidate |
+| `checkpoint/v3-rc-persistent-2026-08-22` | Persistence-based V3 RC recovery point |
+| `release/v3-revival` | Full V3 development history / release branch |
 
 ## Release checklist
 
@@ -359,12 +365,12 @@ Resource defaults are intentionally conservative for public college-project host
 - [x] Guest-session AI assistant
 - [x] Remove persistent routes from the public API
 - [x] Remove Postgres/Redis/Celery from the public runtime architecture
-- [ ] Green final CI on the release head
+- [x] Green release CI, including production container and ARM64 ML
+- [x] Merge NoCodeML 3.0.0 to `main`
 - [ ] Production backend deployment
 - [ ] Vercel frontend deployment
 - [ ] Live classification + regression E2E QA
-- [ ] Merge to `main`
-- [ ] Tag `v3.0.0`
+- [ ] GitHub `v3.0.0` release/tag
 
 ## Project philosophy
 

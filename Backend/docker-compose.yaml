@@ -8,73 +8,16 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app/app:ro
-      - datasets:/app/datasets
-      - models:/app/models
-      - predictions:/app/predictions
+    tmpfs:
+      - /tmp/nocodeml-sessions:mode=0700,uid=10001,gid=10001
+      - /tmp/nocodeml-legacy:mode=0700,uid=10001,gid=10001
+      - /tmp/nocodeml-artifacts:mode=0700,uid=10001,gid=10001
     env_file:
       - .env
     environment:
       PYTHONPATH: /app
-      DATASETS_DIR: /app/datasets
-      MODELS_DIR: /app/models
-      PREDICTIONS_DIR: /app/predictions
+      SESSION_ROOT_DIR: /tmp/nocodeml-sessions
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
-  worker:
-    build: .
-    working_dir: /app
-    volumes:
-      - ./app:/app/app:ro
-      - datasets:/app/datasets
-      - models:/app/models
-      - predictions:/app/predictions
-    env_file:
-      - .env
-    environment:
-      PYTHONPATH: /app
-      DATASETS_DIR: /app/datasets
-      MODELS_DIR: /app/models
-      PREDICTIONS_DIR: /app/predictions
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  postgres:
-    image: postgres:17-alpine
-    ports:
-      - "5433:5432"
-    env_file:
-      - .env
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-volumes:
-  postgres_data:
-  redis_data:
-  datasets:
-  models:
-  predictions:
+# No Postgres, Redis, Celery worker or persistent application volume is part of
+# the V3 guest runtime. All visitor workspaces are short-lived filesystem data.

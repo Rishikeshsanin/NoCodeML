@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Response, status
 
 from app.core.config import settings
 from app.services.session_manager import (
@@ -17,10 +16,6 @@ from app.services.session_manager import (
 
 router = APIRouter()
 SESSION_HEADER = "X-NoCodeML-Session"
-
-
-class SessionEndRequest(BaseModel):
-    session_token: str = Field(min_length=32, max_length=128)
 
 
 def _session_token(
@@ -107,14 +102,14 @@ def clear_session(token: SessionToken):
 
 
 @router.post("/end", status_code=status.HTTP_202_ACCEPTED)
-def mark_session_closing(payload: SessionEndRequest):
-    """Best-effort browser close signal.
+def mark_session_closing(session_token: Annotated[str, Form(min_length=32, max_length=128)]):
+    """Best-effort browser close signal using a CORS-safe form beacon.
 
     Deletion is delayed by a short grace period so normal page reloads can
     heartbeat and keep the workspace alive.
     """
     try:
-        session_manager.mark_closing(payload.session_token)
+        session_manager.mark_closing(session_token)
     except InvalidSessionToken as exc:
         raise _session_http_error(exc) from exc
     return {

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -35,6 +35,9 @@ def _session_token(
             },
         )
     return token
+
+
+SessionToken = Annotated[str, Depends(_session_token)]
 
 
 def _session_http_error(exc: Exception) -> HTTPException:
@@ -71,7 +74,7 @@ def create_session():
 
 
 @router.get("")
-def get_session(token: str = _session_token):
+def get_session(token: SessionToken):
     try:
         metadata = session_manager.touch(token)
     except (InvalidSessionToken, SessionExpired, SessionNotFound) as exc:
@@ -86,7 +89,7 @@ def get_session(token: str = _session_token):
 
 
 @router.post("/heartbeat")
-def heartbeat_session(token: str = _session_token):
+def heartbeat_session(token: SessionToken):
     try:
         metadata = session_manager.touch(token)
     except (InvalidSessionToken, SessionExpired, SessionNotFound) as exc:
@@ -95,7 +98,7 @@ def heartbeat_session(token: str = _session_token):
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
-def clear_session(token: str = _session_token):
+def clear_session(token: SessionToken):
     try:
         session_manager.delete(token)
     except InvalidSessionToken as exc:

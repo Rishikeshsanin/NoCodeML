@@ -90,6 +90,7 @@ class SessionManager:
             raise SessionNotFound("Session metadata is unavailable") from exc
         if not isinstance(payload, dict):
             raise SessionNotFound("Session metadata is invalid")
+        payload.setdefault("active_jobs", 0)
         return payload
 
     def _write_metadata(self, workspace: Path, metadata: dict[str, Any]) -> None:
@@ -117,6 +118,7 @@ class SessionManager:
                 "last_seen": now,
                 "expires_at": now + self.ttl_seconds,
                 "delete_after": None,
+                "active_jobs": 0,
             }
             self._write_metadata(workspace, metadata)
             return token, metadata.copy()
@@ -133,13 +135,15 @@ class SessionManager:
             now = self._now()
             expires_at = int(metadata.get("expires_at") or 0)
             delete_after = metadata.get("delete_after")
+            active_jobs = max(0, int(metadata.get("active_jobs") or 0))
 
-            if expires_at <= now:
-                self._delete_workspace(workspace)
-                raise SessionExpired("Session has expired")
-            if delete_after is not None and int(delete_after) <= now:
-                self._delete_workspace(workspace)
-                raise SessionExpired("Session has ended")
+            if active_jobs <= 0:
+                if expires_at <= now:
+                    self._delete_workspace(workspace)
+                    raise SessionExpired("Session has expired")
+                if delete_after is not None and int(delete_after) <= now:
+                    self._delete_workspace(workspace)
+                    raise SessionExpired("Session has ended")
 
             if touch:
                 metadata["last_seen"] = now
@@ -153,11 +157,37 @@ class SessionManager:
         _, metadata = self.resolve(token, touch=True)
         return metadata
 
+    def acquire_job(self, token: str) -> dict[str, Any]:
+        """Hold the workspace while a long-running ML job is active."""
+        workspace, metadata = self.resolve(token, touch=True)
+        with self._lock:
+            metadata = self._read_metadata(workspace)
+            metadata["active_jobs"] = max(0, int(metadata.get("active_jobs") or 0)) + 1
+            now = self._now()
+            metadata["last_seen"] = now
+            metadata["expires_at"] = now + self.ttl_seconds
+            self._write_metadata(workspace, metadata)
+            return metadata.copy()
+
+    def release_job(self, token: str) -> None:
+        workspace = self._workspace_for_token(token)
+        with self._lock:
+            if not workspace.is_dir():
+                return
+            try:
+                metadata = self._read_metadata(workspace)
+            except SessionNotFound:
+                return
+            metadata["active_jobs"] = max(0, int(metadata.get("active_jobs") or 0) - 1)
+            metadata["last_seen"] = self._now()
+            self._write_metadata(workspace, metadata)
+
     def mark_closing(self, token: str) -> None:
         """Schedule deletion after a grace period.
 
         Browsers also fire unload/pagehide during refresh. A returning page can
         therefore rescue the session simply by touching it before delete_after.
+        Active ML jobs hold a cleanup lease until they finish.
         """
         workspace = self._workspace_for_token(token)
         with self._lock:
@@ -206,10 +236,12 @@ class SessionManager:
                 should_remove = False
                 try:
                     metadata = self._read_metadata(workspace)
+                    active_jobs = max(0, int(metadata.get("active_jobs") or 0))
                     expires_at = int(metadata.get("expires_at") or 0)
                     delete_after = metadata.get("delete_after")
-                    should_remove = expires_at <= now or (
-                        delete_after is not None and int(delete_after) <= now
+                    should_remove = active_jobs <= 0 and (
+                        expires_at <= now
+                        or (delete_after is not None and int(delete_after) <= now)
                     )
                 except (SessionNotFound, TypeError, ValueError):
                     should_remove = True

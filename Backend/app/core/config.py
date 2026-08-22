@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     SESSION_CLEANUP_INTERVAL_SECONDS: int = 300
     SESSION_CLOSE_GRACE_SECONDS: int = 30
 
+    # Bounded guest training capacity for a single-instance deployment.
+    WORKSPACE_TRAINING_WORKERS: int = 1
+    WORKSPACE_MAX_MODELS_PER_RUN: int = 8
+
     # Local artifact staging/storage. These legacy paths remain while dataset,
     # training and prediction services are migrated to the session workspace.
     DATASETS_DIR: str = "./datasets"
@@ -43,7 +47,7 @@ class Settings(BaseSettings):
     S3_REGION: str = "auto"
     S3_ADDRESSING_STYLE: str = "path"
 
-    # Redis (for Celery)
+    # Redis/Celery (legacy during guest-session migration)
     CELERY_BROKER_URL: str = "memory://"
     CELERY_RESULT_BACKEND: str = "cache+memory://"
 
@@ -113,6 +117,10 @@ class Settings(BaseSettings):
             raise ValueError("SESSION_CLEANUP_INTERVAL_SECONDS must be between 10 and 3600")
         if not 5 <= self.SESSION_CLOSE_GRACE_SECONDS <= 300:
             raise ValueError("SESSION_CLOSE_GRACE_SECONDS must be between 5 and 300")
+        if not 1 <= self.WORKSPACE_TRAINING_WORKERS <= 4:
+            raise ValueError("WORKSPACE_TRAINING_WORKERS must be between 1 and 4")
+        if not 1 <= self.WORKSPACE_MAX_MODELS_PER_RUN <= 8:
+            raise ValueError("WORKSPACE_MAX_MODELS_PER_RUN must be between 1 and 8")
 
         backend = self.ARTIFACT_STORAGE_BACKEND.strip().lower()
         if backend not in {"local", "s3"}:

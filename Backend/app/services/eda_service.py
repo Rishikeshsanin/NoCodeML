@@ -69,19 +69,42 @@ async def load_dataset(
     return df, dataset
 
 
+def _is_row_sequence(series: pd.Series) -> bool:
+    """Detect a simple 0..N-1 or 1..N row-number column without flagging arbitrary unique numerics."""
+    if len(series) < 2 or series.isna().any() or not pd.api.types.is_integer_dtype(series):
+        return False
+    values = series.to_numpy(dtype=np.int64, copy=True)
+    if len(np.unique(values)) != len(values):
+        return False
+    sorted_values = np.sort(values)
+    start = int(sorted_values[0])
+    if start not in {0, 1}:
+        return False
+    expected = np.arange(start, start + len(sorted_values), dtype=np.int64)
+    return bool(np.array_equal(sorted_values, expected))
+
+
 def detect_id_columns(df: pd.DataFrame) -> List[str]:
+    """Conservatively identify identifier columns.
+
+    V2 treated every fully-unique numeric/string column as an ID. That can discard
+    valid continuous features and targets. V3 only trusts explicit identifier-style
+    names or true row-number sequences.
+    """
     detected: List[str] = []
-    row_count = len(df)
+    explicit_names = {"id", "index", "key", "uuid", "guid", "rowid", "row_id"}
+
     for column in df.columns:
         name = str(column)
-        lowered = name.lower()
-        name_match = lowered == "id" or lowered.endswith("_id") or lowered.startswith("id_") or lowered in {"index", "key"}
-        unique_match = (
-            row_count > 0
-            and df[column].nunique(dropna=True) == row_count
-            and (pd.api.types.is_numeric_dtype(df[column]) or pd.api.types.is_string_dtype(df[column]))
+        lowered = name.strip().lower()
+        name_match = (
+            lowered in explicit_names
+            or lowered.endswith("_id")
+            or lowered.startswith("id_")
+            or lowered.endswith("_key")
         )
-        if name_match or unique_match:
+        sequence_match = _is_row_sequence(df[column])
+        if name_match or sequence_match:
             detected.append(name)
     return detected
 

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     PROJECT_NAME: str = "NoCodeML API"
-    APP_VERSION: str = "3.0.0-rc.2"
+    APP_VERSION: str = "3.0.0"
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
 

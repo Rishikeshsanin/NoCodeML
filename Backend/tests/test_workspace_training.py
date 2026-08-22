@@ -40,7 +40,7 @@ def wait_for_run(client: TestClient, token: str, run_id: str, timeout: float = 2
     raise AssertionError("Temporary training run did not finish before timeout")
 
 
-def test_guest_classification_training_flow():
+def test_guest_classification_training_and_prediction_flow():
     rows = ["age,income,city,churn"]
     cities = ["Bengaluru", "Hyderabad", "Chennai"]
     for index in range(30):
@@ -49,7 +49,7 @@ def test_guest_classification_training_flow():
 
     with TestClient(app) as client:
         token = create_session(client)
-        dataset_id = upload(client, token, "classification.csv", csv_data)
+        dataset_id = upload(client, token, "Customer Churn.csv", csv_data)
         started = client.post(
             "/api/v1/workspace/training/runs",
             headers={SESSION_HEADER: token},
@@ -65,12 +65,42 @@ def test_guest_classification_training_flow():
             },
         )
         assert started.status_code == 202, started.text
-        run = wait_for_run(client, token, started.json()["id"])
+        run_id = started.json()["id"]
+        run = wait_for_run(client, token, run_id)
         assert run["status"] == "completed", run
         assert run["best_model"]["model_type"] == "LogisticRegression"
         assert run["best_model"]["model_file"].endswith(".joblib")
         assert run["progress"]["percent"] == 100
         assert run["results"][0]["metrics"]["test"]["accuracy"] >= 0
+
+        single = client.post(
+            f"/api/v1/workspace/training/runs/{run_id}/predict",
+            headers={SESSION_HEADER: token},
+            json={"features": {"age": 27, "income": 62500, "city": "Bengaluru"}},
+        )
+        assert single.status_code == 200, single.text
+        assert str(single.json()["prediction"]) in {"0", "1"}
+        assert single.json()["model_type"] == "LogisticRegression"
+
+        batch_csv = b"age,income,city\n23,43000,Bengaluru\n31,78000,Hyderabad\n"
+        batch = client.post(
+            f"/api/v1/workspace/training/runs/{run_id}/predict/batch",
+            headers={SESSION_HEADER: token},
+            files={"file": ("new-customers.csv", BytesIO(batch_csv), "text/csv")},
+        )
+        assert batch.status_code == 201, batch.text
+        batch_payload = batch.json()
+        assert batch_payload["total_predictions"] == 2
+        assert batch_payload["download_filename"].startswith("nocodeml_customer-churn_predictions_")
+        prediction_id = batch_payload["id"]
+
+        download = client.get(
+            f"/api/v1/workspace/predictions/{prediction_id}/download",
+            headers={SESSION_HEADER: token},
+        )
+        assert download.status_code == 200, download.text
+        assert "nocodeml_customer-churn_predictions_" in download.headers["content-disposition"]
+        assert "prediction" in download.text.splitlines()[0]
 
 
 def test_guest_regression_training_flow():
@@ -101,8 +131,17 @@ def test_guest_regression_training_flow():
             },
         )
         assert started.status_code == 202, started.text
-        run = wait_for_run(client, token, started.json()["id"])
+        run_id = started.json()["id"]
+        run = wait_for_run(client, token, run_id)
         assert run["status"] == "completed", run
         assert run["best_model"]["model_type"] == "LinearRegression"
         assert run["best_model"]["metric"] == "r2_score"
         assert run["results"][0]["metrics"]["test"]["r2_score"] > 0.5
+
+        predicted = client.post(
+            f"/api/v1/workspace/training/runs/{run_id}/predict",
+            headers={SESSION_HEADER: token},
+            json={"features": {"area": 1200, "bedrooms": 3, "city": "Bengaluru"}},
+        )
+        assert predicted.status_code == 200, predicted.text
+        assert float(predicted.json()["prediction"]) > 0

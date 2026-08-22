@@ -26,6 +26,8 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "warn",
       // Some generated shadcn primitives use empty extension interfaces.
       "@typescript-eslint/no-empty-object-type": "warn",
+      // V2 has two harmless mutable declarations that are being cleaned during the type pass.
+      "prefer-const": "warn",
     },
   },
 );

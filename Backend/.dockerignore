@@ -8,7 +8,15 @@ __pycache__
 *.egg-info
 dist
 build
+
+# Never send real environment/secrets files to the Docker build context.
 .env
+.env.*
+*.env
+*.env.*
+!.env.example
+!.env.production.example
+
 .venv
 venv/
 .git

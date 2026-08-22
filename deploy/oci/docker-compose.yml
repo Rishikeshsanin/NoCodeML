@@ -1,0 +1,53 @@
+name: nocodeml-production
+
+services:
+  api:
+    build:
+      context: ../../Backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SESSION_ROOT_DIR: /tmp/nocodeml-sessions
+      SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-60}
+      SESSION_CLEANUP_INTERVAL_SECONDS: ${SESSION_CLEANUP_INTERVAL_SECONDS:-300}
+      SESSION_CLOSE_GRACE_SECONDS: ${SESSION_CLOSE_GRACE_SECONDS:-30}
+      WORKSPACE_TRAINING_WORKERS: ${WORKSPACE_TRAINING_WORKERS:-1}
+      WORKSPACE_MAX_MODELS_PER_RUN: ${WORKSPACE_MAX_MODELS_PER_RUN:-8}
+      BACKEND_CORS_ORIGINS: ${FRONTEND_ORIGIN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
+    tmpfs:
+      - /tmp/nocodeml-sessions:rw,noexec,nosuid,size=6g,mode=0700,uid=10001,gid=10001
+      - /tmp/nocodeml-legacy:rw,noexec,nosuid,size=256m,mode=0700,uid=10001,gid=10001
+      - /tmp/nocodeml-artifacts:rw,noexec,nosuid,size=512m,mode=0700,uid=10001,gid=10001
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NOCODEML_HOST: ${NOCODEML_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+# Only Caddy certificate/config state is persistent. Visitor ML workspaces are
+# tmpfs and are therefore lost on container/VM restart in addition to TTL cleanup.

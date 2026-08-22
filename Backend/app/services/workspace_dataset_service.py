@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -23,6 +24,7 @@ from app.services.session_manager import SessionExpired, SessionNotFound, sessio
 
 
 MANIFEST_FILE = "workspace.json"
+_MANIFEST_LOCK = threading.RLock()
 
 
 def _manifest_path(token: str) -> Path:
@@ -162,10 +164,11 @@ async def create_workspace_dataset(
     }
 
     try:
-        manifest = _load_manifest(token)
-        manifest["datasets"][dataset_id] = dataset
-        manifest["active_dataset_id"] = dataset_id
-        _save_manifest(token, manifest)
+        with _MANIFEST_LOCK:
+            manifest = _load_manifest(token)
+            manifest["datasets"][dataset_id] = dataset
+            manifest["active_dataset_id"] = dataset_id
+            _save_manifest(token, manifest)
     except Exception:
         destination.unlink(missing_ok=True)
         raise
@@ -174,18 +177,45 @@ async def create_workspace_dataset(
 
 
 def list_workspace_datasets(token: str) -> list[dict[str, Any]]:
-    manifest = _load_manifest(token)
-    datasets = list(manifest["datasets"].values())
+    with _MANIFEST_LOCK:
+        manifest = _load_manifest(token)
+        datasets = list(manifest["datasets"].values())
     return sorted(datasets, key=lambda item: item.get("created_at", 0), reverse=True)
 
 
 def get_workspace_dataset(token: str, dataset_id: str) -> dict[str, Any]:
-    _, dataset = _dataset_from_manifest(token, dataset_id)
-    return dataset.copy()
+    with _MANIFEST_LOCK:
+        _, dataset = _dataset_from_manifest(token, dataset_id)
+        return dataset.copy()
+
+
+def update_workspace_dataset(
+    token: str,
+    dataset_id: str,
+    name: str,
+    description: str | None = None,
+) -> dict[str, Any]:
+    clean_name = name.strip()
+    if not clean_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "DATASET_NAME_REQUIRED", "message": "Dataset name cannot be empty."},
+        )
+
+    with _MANIFEST_LOCK:
+        manifest, dataset = _dataset_from_manifest(token, dataset_id)
+        dataset["name"] = clean_name
+        if description is not None:
+            dataset["description"] = description.strip() or None
+        manifest["datasets"][dataset_id] = dataset
+        _save_manifest(token, manifest)
+        return dataset.copy()
 
 
 def preview_workspace_dataset(token: str, dataset_id: str, rows: int = 10) -> dict[str, Any]:
-    _, dataset = _dataset_from_manifest(token, dataset_id)
+    with _MANIFEST_LOCK:
+        _, dataset = _dataset_from_manifest(token, dataset_id)
+        dataset = dataset.copy()
     rows = max(1, min(rows, MAX_PREVIEW_ROWS))
     path = _dataset_path(token, dataset)
     if not path.is_file():
@@ -212,11 +242,12 @@ def preview_workspace_dataset(token: str, dataset_id: str, rows: int = 10) -> di
 
 
 def delete_workspace_dataset(token: str, dataset_id: str) -> bool:
-    manifest, dataset = _dataset_from_manifest(token, dataset_id)
-    path = _dataset_path(token, dataset)
-    path.unlink(missing_ok=True)
-    del manifest["datasets"][dataset_id]
-    if manifest.get("active_dataset_id") == dataset_id:
-        manifest["active_dataset_id"] = next(iter(manifest["datasets"]), None)
-    _save_manifest(token, manifest)
+    with _MANIFEST_LOCK:
+        manifest, dataset = _dataset_from_manifest(token, dataset_id)
+        path = _dataset_path(token, dataset)
+        path.unlink(missing_ok=True)
+        del manifest["datasets"][dataset_id]
+        if manifest.get("active_dataset_id") == dataset_id:
+            manifest["active_dataset_id"] = next(iter(manifest["datasets"]), None)
+        _save_manifest(token, manifest)
     return True
